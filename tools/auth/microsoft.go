@@ -2,7 +2,9 @@ package auth
 
 import (
 	"encoding/json"
+	"net/mail"
 
+	"github.com/PaesslerAG/jsonpath"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/microsoft"
 )
@@ -21,10 +23,10 @@ type Microsoft struct {
 func NewMicrosoftProvider() *Microsoft {
 	endpoints := microsoft.AzureADEndpoint("")
 	return &Microsoft{&baseProvider{
-		scopes:     []string{"User.Read", "oidc", "email", "profile"},
+		scopes:     []string{"User.Read"},
 		authUrl:    endpoints.AuthURL,
 		tokenUrl:   endpoints.TokenURL,
-		userApiUrl: "https://graph.microsoft.com/v1.0/me",
+		userApiUrl: "https://graph.microsoft.com/beta/me/profile",
 	}}
 }
 
@@ -46,11 +48,38 @@ func (p *Microsoft) FetchAuthUser(token *oauth2.Token) (*AuthUser, error) {
 	extracted := struct {
 		Id    string `json:"id"`
 		Name  string `json:"displayName"`
-		Email string `json:"mail"`
+		Email string `json:"userPrincipalName"`
 	}{}
-	if err := json.Unmarshal(data, &extracted); err != nil {
-		return nil, err
+	id, err := jsonpath.Get("$.account[0].id", rawUser)
+	if err != nil {
+		id = ""
 	}
+	extracted.Id = id.(string)
+	email, err := jsonpath.Get("$.emails[0].address", rawUser)
+	if err != nil {
+		email, err = jsonpath.Get("$.account[0].userPrincipalName", rawUser)
+		if err != nil {
+			email = ""
+		} else {
+			var addr *mail.Address
+			addr, err = mail.ParseAddress(email.(string))
+			if err != nil {
+				email = ""
+			}
+			email = addr.Address
+
+		}
+	}
+	extracted.Email = email.(string)
+	first, err := jsonpath.Get("$.names[0].first", rawUser)
+	if err != nil {
+		first = ""
+	}
+	last, err := jsonpath.Get("$.names[0].last", rawUser)
+	if err != nil {
+		last = ""
+	}
+	extracted.Name = first.(string) + " " + last.(string)
 
 	user := &AuthUser{
 		Id:           extracted.Id,

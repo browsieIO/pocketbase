@@ -26,7 +26,10 @@ require (
 	modernc.org/sqlite v1.21.0
 )
 
+require github.com/PaesslerAG/gval v1.0.0 // indirect
+
 require (
+	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/aws/aws-sdk-go-v2 v1.17.5 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect

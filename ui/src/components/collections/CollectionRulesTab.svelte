@@ -1,6 +1,7 @@
 <script>
     import { slide } from "svelte/transition";
     import { Collection } from "pocketbase";
+    import tooltip from "@/actions/tooltip";
     import CommonHelper from "@/utils/CommonHelper";
     import RuleField from "@/components/collections/RuleField.svelte";
 
@@ -11,7 +12,7 @@
     let showFiltersInfo = false;
 </script>
 
-<div class="block m-b-base handle" class:fade={!showFiltersInfo}>
+<div class="block m-b-sm handle">
     <div class="flex txt-sm txt-hint m-b-5">
         <p>
             All rules follow the
@@ -45,7 +46,7 @@
                         The request fields could be accessed with the special <em>@request</em> filter:
                     </p>
                     <div class="inline-flex flex-gap-5">
-                        <code>@request.method</code>
+                        <code>@request.headers.*</code>
                         <code>@request.query.*</code>
                         <code>@request.data.*</code>
                         <code>@request.auth.*</code>
@@ -77,25 +78,34 @@
 
 <RuleField label="List/Search rule" formKey="listRule" {collection} bind:rule={collection.listRule} />
 
-<hr class="m-t-sm m-b-sm" />
 <RuleField label="View rule" formKey="viewRule" {collection} bind:rule={collection.viewRule} />
 
-{#if !collection?.isView}
-    <hr class="m-t-sm m-b-sm" />
-    <RuleField label="Create rule" formKey="createRule" {collection} bind:rule={collection.createRule} />
+{#if !collection?.$isView}
+    <RuleField label="Create rule" formKey="createRule" {collection} bind:rule={collection.createRule}>
+        <svelte:fragment slot="afterLabel" let:isAdminOnly>
+            {#if !isAdminOnly}
+                <i
+                    class="ri-information-line link-hint"
+                    use:tooltip={{
+                        text: `The Create rule is executed after a "dry save" of the submitted data, giving you access to the main record fields as in every other rule.`,
+                        position: "top",
+                    }}
+                />
+            {/if}
+        </svelte:fragment>
+    </RuleField>
 
-    <hr class="m-t-sm m-b-sm" />
     <RuleField label="Update rule" formKey="updateRule" {collection} bind:rule={collection.updateRule} />
 
-    <hr class="m-t-sm m-b-sm" />
     <RuleField label="Delete rule" formKey="deleteRule" {collection} bind:rule={collection.deleteRule} />
 {/if}
 
-{#if collection?.isAuth}
-    <hr class="m-t-sm m-b-sm" />
+{#if collection?.$isAuth}
     <RuleField
         label="Manage rule"
         formKey="options.manageRule"
+        placeholder=""
+        required={collection.options.manageRule !== null}
         {collection}
         bind:rule={collection.options.manageRule}
     >

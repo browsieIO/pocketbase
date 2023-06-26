@@ -57,12 +57,12 @@
         updateStoredHiddenColumns();
     }
 
-    $: hasCreated = !collection?.isView || (records.length > 0 && records[0].created != "");
+    $: hasCreated = !collection?.$isView || (records.length > 0 && records[0].created != "");
 
-    $: hasUpdated = !collection?.isView || (records.length > 0 && records[0].updated != "");
+    $: hasUpdated = !collection?.$isView || (records.length > 0 && records[0].updated != "");
 
     $: collumnsToHide = [].concat(
-        collection.isAuth
+        collection.$isAuth
             ? [
                   { id: "@username", name: "username" },
                   { id: "@email", name: "email" },
@@ -125,10 +125,12 @@
             listSort = parts.join(",");
         }
 
+        const fallbackSearchFields = CommonHelper.getAllCollectionIdentifiers(collection);
+
         return ApiClient.collection(collection.id)
             .getList(page, 30, {
                 sort: listSort,
-                filter: filter,
+                filter: CommonHelper.normalizeSearchFilter(filter, fallbackSearchFields),
                 expand: relFields.map((field) => field.name).join(","),
                 $cancelKey: "records_list",
             })
@@ -163,7 +165,7 @@
                     isLoading = false;
                     console.warn(err);
                     clearList();
-                    ApiClient.errorResponseHandler(err, false);
+                    ApiClient.error(err, false);
                 }
             });
     }
@@ -232,7 +234,7 @@
                 deselectAllRecords();
             })
             .catch((err) => {
-                ApiClient.errorResponseHandler(err);
+                ApiClient.error(err);
             })
             .finally(() => {
                 isDeleting = false;
@@ -276,7 +278,7 @@
     <table class="table" class:table-loading={isLoading}>
         <thead>
             <tr>
-                {#if !collection.isView}
+                {#if !collection.$isView}
                     <th class="bulk-select-col min-width">
                         {#if isLoading}
                             <span class="loader loader-sm" />
@@ -304,7 +306,7 @@
                     </SortHeader>
                 {/if}
 
-                {#if collection.isAuth}
+                {#if collection.$isAuth}
                     {#if !hiddenColumns.includes("@username")}
                         <SortHeader class="col-type-text col-field-id" name="username" bind:sort>
                             <div class="col-header-content">
@@ -369,7 +371,7 @@
             </tr>
         </thead>
         <tbody>
-            {#each records as record (!collection.isView ? record.id : record)}
+            {#each records as record (!collection.$isView ? record.id : record)}
                 <tr
                     tabindex="0"
                     class="row-handle"
@@ -381,7 +383,7 @@
                         }
                     }}
                 >
-                    {#if !collection.isView}
+                    {#if !collection.$isView}
                         <td class="bulk-select-col min-width">
                             <!-- svelte-ignore a11y-click-events-have-key-events -->
                             <div class="form-field" on:click|stopPropagation>
@@ -404,7 +406,7 @@
                                     <div class="txt">{record.id}</div>
                                 </div>
 
-                                {#if collection.isAuth}
+                                {#if collection.$isAuth}
                                     {#if record.verified}
                                         <i
                                             class="ri-checkbox-circle-fill txt-sm txt-success"
@@ -421,7 +423,7 @@
                         </td>
                     {/if}
 
-                    {#if collection.isAuth}
+                    {#if collection.$isAuth}
                         {#if !hiddenColumns.includes("@username")}
                             <td class="col-type-text col-field-username">
                                 {#if CommonHelper.isEmpty(record.username)}
@@ -487,7 +489,7 @@
                                 >
                                     <span class="txt">Clear filters</span>
                                 </button>
-                            {:else if !collection?.isView}
+                            {:else if !collection?.$isView}
                                 <button
                                     type="button"
                                     class="btn btn-secondary btn-expanded m-t-sm"

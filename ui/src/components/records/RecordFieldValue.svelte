@@ -15,7 +15,7 @@
 </script>
 
 {#if field.type === "json"}
-    {@const stringifiedJson = JSON.stringify(rawValue) || ""}
+    {@const stringifiedJson = CommonHelper.trimQuotedValue(JSON.stringify(rawValue)) || '""'}
     {#if short}
         <span class="txt txt-ellipsis">
             {CommonHelper.truncate(stringifiedJson)}
@@ -84,7 +84,7 @@
 {:else if field.type === "relation"}
     {@const relations = CommonHelper.toArray(rawValue)}
     {@const expanded = CommonHelper.toArray(record.expand[field.name])}
-    {@const relLimit = short ? 20 : 200}
+    {@const relLimit = short ? 20 : 500}
     <div class="inline-flex">
         {#if expanded.length}
             {#each expanded.slice(0, relLimit) as item, i (i + item)}
@@ -102,10 +102,15 @@
         {/if}
     </div>
 {:else if field.type === "file"}
+    {@const files = CommonHelper.toArray(rawValue)}
+    {@const filesLimit = short ? 10 : 500}
     <div class="inline-flex">
-        {#each CommonHelper.toArray(rawValue) as filename, i (i + filename)}
+        {#each files.slice(0, filesLimit) as filename, i (i + filename)}
             <RecordFileThumb {record} {filename} size="sm" />
         {/each}
+        {#if files.length > filesLimit}
+            ...
+        {/if}
     </div>
 {:else if short}
     <span class="txt txt-ellipsis" title={CommonHelper.truncate(rawValue)}>

@@ -26,7 +26,7 @@
     let changePasswordToggle = false;
 
     $: hasChanges =
-        (admin.isNew && email != "") ||
+        (admin.$isNew && email != "") ||
         changePasswordToggle ||
         email !== admin.email ||
         avatar !== admin.avatar;
@@ -44,7 +44,7 @@
     }
 
     function load(model) {
-        admin = model?.clone ? model.clone() : new Admin();
+        admin = model?.$clone ? model.$clone() : new Admin();
         reset(); // reset form
     }
 
@@ -65,13 +65,13 @@
         isSaving = true;
 
         const data = { email, avatar };
-        if (admin.isNew || changePasswordToggle) {
+        if (admin.$isNew || changePasswordToggle) {
             data["password"] = password;
             data["passwordConfirm"] = passwordConfirm;
         }
 
         let request;
-        if (admin.isNew) {
+        if (admin.$isNew) {
             request = ApiClient.admins.create(data);
         } else {
             request = ApiClient.admins.update(admin.id, data);
@@ -81,15 +81,16 @@
             .then(async (result) => {
                 confirmClose = false;
                 hide();
-                addSuccessToast(admin.isNew ? "Successfully created admin." : "Successfully updated admin.");
-                dispatch("save", result);
+                addSuccessToast(admin.$isNew ? "Successfully created admin." : "Successfully updated admin.");
 
                 if (ApiClient.authStore.model?.id === result.id) {
                     ApiClient.authStore.save(ApiClient.authStore.token, result);
                 }
+
+                dispatch("save", result);
             })
             .catch((err) => {
-                ApiClient.errorResponseHandler(err);
+                ApiClient.error(err);
             })
             .finally(() => {
                 isSaving = false;
@@ -111,7 +112,7 @@
                     dispatch("delete", admin);
                 })
                 .catch((err) => {
-                    ApiClient.errorResponseHandler(err);
+                    ApiClient.error(err);
                 });
         });
     }
@@ -136,12 +137,12 @@
 >
     <svelte:fragment slot="header">
         <h4>
-            {admin.isNew ? "New admin" : "Edit admin"}
+            {admin.$isNew ? "New admin" : "Edit admin"}
         </h4>
     </svelte:fragment>
 
     <form id={formId} class="grid" autocomplete="off" on:submit|preventDefault={save}>
-        {#if !admin.isNew}
+        {#if !admin.$isNew}
             <Field class="form-field readonly" name="id" let:uniqueId>
                 <label for={uniqueId}>
                     <i class={CommonHelper.getFieldTypeIcon("primary")} />
@@ -186,14 +187,14 @@
             <input type="email" autocomplete="off" id={uniqueId} required bind:value={email} />
         </Field>
 
-        {#if !admin.isNew}
+        {#if !admin.$isNew}
             <Field class="form-field form-field-toggle" let:uniqueId>
                 <input type="checkbox" id={uniqueId} bind:checked={changePasswordToggle} />
                 <label for={uniqueId}>Change password</label>
             </Field>
         {/if}
 
-        {#if admin.isNew || changePasswordToggle}
+        {#if admin.$isNew || changePasswordToggle}
             <div class="col-12">
                 <div class="grid" transition:slide|local={{ duration: 150 }}>
                     <div class="col-sm-6">
@@ -232,7 +233,7 @@
     </form>
 
     <svelte:fragment slot="footer">
-        {#if !admin.isNew}
+        {#if !admin.$isNew}
             <button type="button" aria-label="More" class="btn btn-sm btn-circle btn-transparent">
                 <!-- empty span for alignment -->
                 <span />
@@ -257,7 +258,7 @@
             class:btn-loading={isSaving}
             disabled={!hasChanges || isSaving}
         >
-            <span class="txt">{admin.isNew ? "Create" : "Save changes"}</span>
+            <span class="txt">{admin.$isNew ? "Create" : "Save changes"}</span>
         </button>
     </svelte:fragment>
 </OverlayPanel>

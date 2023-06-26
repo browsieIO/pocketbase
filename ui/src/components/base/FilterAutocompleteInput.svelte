@@ -256,6 +256,7 @@
         result.push("@request.method");
         result.push("@request.query.");
         result.push("@request.data.");
+        result.push("@request.headers.");
         result.push("@request.auth.id");
         result.push("@request.auth.collectionId");
         result.push("@request.auth.collectionName");
@@ -267,7 +268,7 @@
         result.push("@request.auth.updated");
 
         // load auth collection fields
-        const authCollections = cachedCollections.filter((collection) => collection.isAuth);
+        const authCollections = cachedCollections.filter((collection) => collection.$isAuth);
         for (const collection of authCollections) {
             const authKeys = getCollectionFieldKeys(collection.id, "@request.auth.");
             for (const k of authKeys) {

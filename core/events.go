@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/labstack/echo/v5"
 	"github.com/pocketbase/pocketbase/daos"
 	"github.com/pocketbase/pocketbase/models"
 	"github.com/pocketbase/pocketbase/models/schema"
@@ -11,9 +12,28 @@ import (
 	"github.com/pocketbase/pocketbase/tools/mailer"
 	"github.com/pocketbase/pocketbase/tools/search"
 	"github.com/pocketbase/pocketbase/tools/subscriptions"
-
-	"github.com/labstack/echo/v5"
 )
+
+var (
+	_ hook.Tagger = (*BaseModelEvent)(nil)
+	_ hook.Tagger = (*BaseCollectionEvent)(nil)
+)
+
+type BaseModelEvent struct {
+	Model models.Model
+}
+
+func (e *BaseModelEvent) Tags() []string {
+	if e.Model == nil {
+		return nil
+	}
+
+	if r, ok := e.Model.(*models.Record); ok && r.Collection() != nil {
+		return []string{r.Collection().Id, r.Collection().Name}
+	}
+
+	return []string{e.Model.TableName()}
+}
 
 type BaseCollectionEvent struct {
 	Collection *models.Collection
@@ -45,6 +65,10 @@ type BootstrapEvent struct {
 	App App
 }
 
+type TerminateEvent struct {
+	App App
+}
+
 type ServeEvent struct {
 	App    App
 	Router *echo.Echo
@@ -59,23 +83,10 @@ type ApiErrorEvent struct {
 // Model DAO events data
 // -------------------------------------------------------------------
 
-var _ hook.Tagger = (*ModelEvent)(nil)
-
 type ModelEvent struct {
-	Dao   *daos.Dao
-	Model models.Model
-}
+	BaseModelEvent
 
-func (e *ModelEvent) Tags() []string {
-	if e.Model == nil {
-		return nil
-	}
-
-	if r, ok := e.Model.(*models.Record); ok && r.Collection() != nil {
-		return []string{r.Collection().Id, r.Collection().Name}
-	}
-
-	return []string{e.Model.TableName()}
+	Dao *daos.Dao
 }
 
 // -------------------------------------------------------------------
@@ -206,9 +217,12 @@ type RecordAuthWithPasswordEvent struct {
 type RecordAuthWithOAuth2Event struct {
 	BaseCollectionEvent
 
-	HttpContext echo.Context
-	Record      *models.Record
-	OAuth2User  *auth.AuthUser
+	HttpContext    echo.Context
+	ProviderName   string
+	ProviderClient auth.Provider
+	Record         *models.Record
+	OAuth2User     *auth.AuthUser
+	IsNewRecord    bool
 }
 
 type RecordAuthRefreshEvent struct {
@@ -376,6 +390,13 @@ type CollectionsImportEvent struct {
 // -------------------------------------------------------------------
 // File API events data
 // -------------------------------------------------------------------
+
+type FileTokenEvent struct {
+	BaseModelEvent
+
+	HttpContext echo.Context
+	Token       string
+}
 
 type FileDownloadEvent struct {
 	BaseCollectionEvent

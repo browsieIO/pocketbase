@@ -25,10 +25,12 @@ func TestSettingsValidate(t *testing.T) {
 	s.S3.Endpoint = "invalid"
 	s.AdminAuthToken.Duration = -10
 	s.AdminPasswordResetToken.Duration = -10
+	s.AdminFileToken.Duration = -10
 	s.RecordAuthToken.Duration = -10
 	s.RecordPasswordResetToken.Duration = -10
 	s.RecordEmailChangeToken.Duration = -10
 	s.RecordVerificationToken.Duration = -10
+	s.RecordFileToken.Duration = -10
 	s.GoogleAuth.Enabled = true
 	s.GoogleAuth.ClientId = ""
 	s.FacebookAuth.Enabled = true
@@ -63,6 +65,8 @@ func TestSettingsValidate(t *testing.T) {
 	s.OIDC2Auth.ClientId = ""
 	s.OIDC3Auth.Enabled = true
 	s.OIDC3Auth.ClientId = ""
+	s.AppleAuth.Enabled = true
+	s.AppleAuth.ClientId = ""
 
 	// check if Validate() is triggering the members validate methods.
 	err := s.Validate()
@@ -77,10 +81,12 @@ func TestSettingsValidate(t *testing.T) {
 		`"s3":{`,
 		`"adminAuthToken":{`,
 		`"adminPasswordResetToken":{`,
+		`"adminFileToken":{`,
 		`"recordAuthToken":{`,
 		`"recordPasswordResetToken":{`,
 		`"recordEmailChangeToken":{`,
 		`"recordVerificationToken":{`,
+		`"recordFileToken":{`,
 		`"googleAuth":{`,
 		`"facebookAuth":{`,
 		`"githubAuth":{`,
@@ -98,6 +104,7 @@ func TestSettingsValidate(t *testing.T) {
 		`"oidcAuth":{`,
 		`"oidc2Auth":{`,
 		`"oidc3Auth":{`,
+		`"appleAuth":{`,
 	}
 
 	errBytes, _ := json.Marshal(err)
@@ -120,12 +127,15 @@ func TestSettingsMerge(t *testing.T) {
 	s2.Smtp.Enabled = true
 	s2.S3.Enabled = true
 	s2.S3.Endpoint = "test"
+	s2.Backups.Cron = "* * * * *"
 	s2.AdminAuthToken.Duration = 1
 	s2.AdminPasswordResetToken.Duration = 2
+	s2.AdminFileToken.Duration = 2
 	s2.RecordAuthToken.Duration = 3
 	s2.RecordPasswordResetToken.Duration = 4
 	s2.RecordEmailChangeToken.Duration = 5
 	s2.RecordVerificationToken.Duration = 6
+	s2.RecordFileToken.Duration = 7
 	s2.GoogleAuth.Enabled = true
 	s2.GoogleAuth.ClientId = "google_test"
 	s2.FacebookAuth.Enabled = true
@@ -160,6 +170,8 @@ func TestSettingsMerge(t *testing.T) {
 	s2.OIDC2Auth.ClientId = "oidc2_test"
 	s2.OIDC3Auth.Enabled = true
 	s2.OIDC3Auth.ClientId = "oidc3_test"
+	s2.AppleAuth.Enabled = true
+	s2.AppleAuth.ClientId = "apple_test"
 
 	if err := s1.Merge(s2); err != nil {
 		t.Fatal(err)
@@ -220,12 +232,15 @@ func TestSettingsRedactClone(t *testing.T) {
 	// secrets
 	s1.Smtp.Password = testSecret
 	s1.S3.Secret = testSecret
+	s1.Backups.S3.Secret = testSecret
 	s1.AdminAuthToken.Secret = testSecret
 	s1.AdminPasswordResetToken.Secret = testSecret
+	s1.AdminFileToken.Secret = testSecret
 	s1.RecordAuthToken.Secret = testSecret
 	s1.RecordPasswordResetToken.Secret = testSecret
 	s1.RecordEmailChangeToken.Secret = testSecret
 	s1.RecordVerificationToken.Secret = testSecret
+	s1.RecordFileToken.Secret = testSecret
 	s1.GoogleAuth.ClientSecret = testSecret
 	s1.FacebookAuth.ClientSecret = testSecret
 	s1.GithubAuth.ClientSecret = testSecret
@@ -243,6 +258,7 @@ func TestSettingsRedactClone(t *testing.T) {
 	s1.OIDCAuth.ClientSecret = testSecret
 	s1.OIDC2Auth.ClientSecret = testSecret
 	s1.OIDC3Auth.ClientSecret = testSecret
+	s1.AppleAuth.ClientSecret = testSecret
 
 	s1Bytes, err := json.Marshal(s1)
 	if err != nil {
@@ -297,6 +313,7 @@ func TestNamedAuthProviderConfigs(t *testing.T) {
 	s.OIDCAuth.ClientId = "oidc_test"
 	s.OIDC2Auth.ClientId = "oidc2_test"
 	s.OIDC3Auth.ClientId = "oidc3_test"
+	s.AppleAuth.ClientId = "apple_test"
 
 	result := s.NamedAuthProviderConfigs()
 
@@ -324,6 +341,7 @@ func TestNamedAuthProviderConfigs(t *testing.T) {
 		`"oidc":{"enabled":false,"clientId":"oidc_test"`,
 		`"oidc2":{"enabled":false,"clientId":"oidc2_test"`,
 		`"oidc3":{"enabled":false,"clientId":"oidc3_test"`,
+		`"apple":{"enabled":false,"clientId":"apple_test"`,
 	}
 	for _, p := range expectedParts {
 		if !strings.Contains(encodedStr, p) {
@@ -590,6 +608,74 @@ func TestMetaConfigValidate(t *testing.T) {
 
 		if result == nil && scenario.expectError {
 			t.Errorf("(%d) Expected error, got nil", i)
+		}
+	}
+}
+
+func TestBackupsConfigValidate(t *testing.T) {
+	scenarios := []struct {
+		name           string
+		config         settings.BackupsConfig
+		expectedErrors []string
+	}{
+		{
+			"zero value",
+			settings.BackupsConfig{},
+			[]string{},
+		},
+		{
+			"invalid cron",
+			settings.BackupsConfig{
+				Cron:        "invalid",
+				CronMaxKeep: 0,
+			},
+			[]string{"cron", "cronMaxKeep"},
+		},
+		{
+			"invalid enabled S3",
+			settings.BackupsConfig{
+				S3: settings.S3Config{
+					Enabled: true,
+				},
+			},
+			[]string{"s3"},
+		},
+		{
+			"valid data",
+			settings.BackupsConfig{
+				S3: settings.S3Config{
+					Enabled:   true,
+					Endpoint:  "example.com",
+					Bucket:    "test",
+					Region:    "test",
+					AccessKey: "test",
+					Secret:    "test",
+				},
+				Cron:        "*/10 * * * *",
+				CronMaxKeep: 1,
+			},
+			[]string{},
+		},
+	}
+
+	for _, s := range scenarios {
+		result := s.config.Validate()
+
+		// parse errors
+		errs, ok := result.(validation.Errors)
+		if !ok && result != nil {
+			t.Errorf("[%s] Failed to parse errors %v", s.name, result)
+			continue
+		}
+
+		// check errors
+		if len(errs) > len(s.expectedErrors) {
+			t.Errorf("[%s] Expected error keys %v, got %v", s.name, s.expectedErrors, errs)
+		}
+		for _, k := range s.expectedErrors {
+			if _, ok := errs[k]; !ok {
+				t.Errorf("[%s] Missing expected error key %q in %v", s.name, k, errs)
+			}
 		}
 	}
 }

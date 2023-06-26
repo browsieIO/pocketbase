@@ -5,12 +5,16 @@
     export let trigger = undefined;
     export let active = false;
     export let escClose = true;
+    export let autoScroll = true;
     export let closableClass = "closable";
     let classes = "";
     export { classes as class }; // export reserved keyword
 
-    let container = undefined;
-    let activeTrigger = undefined;
+    let container;
+    let containerChild;
+    let activeTrigger;
+    let scrollTimeoutId;
+    let isOutsideMouseDown = false;
 
     const dispatch = createEventDispatcher();
 
@@ -28,10 +32,28 @@
 
     export function hide() {
         active = false;
+        isOutsideMouseDown = false;
+        clearTimeout(scrollTimeoutId);
     }
 
     export function show() {
         active = true;
+
+        clearTimeout(scrollTimeoutId);
+        scrollTimeoutId = setTimeout(() => {
+            if (!autoScroll) {
+                return;
+            }
+
+            if (containerChild?.scrollIntoViewIfNeeded) {
+                containerChild?.scrollIntoViewIfNeeded();
+            } else if (containerChild?.scrollIntoView) {
+                containerChild?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "nearest",
+                });
+            }
+        }, 180);
     }
 
     export function toggle() {
@@ -73,12 +95,6 @@
         }
     }
 
-    function handleOutsideClick(e) {
-        if (active && !container?.contains(e.target) && !activeTrigger?.contains(e.target)) {
-            hide();
-        }
-    }
-
     function handleEscPress(e) {
         if (active && escClose && e.code === "Escape") {
             e.preventDefault();
@@ -86,32 +102,47 @@
         }
     }
 
+    function handleOutsideMousedown(e) {
+        if (active && !container?.contains(e.target)) {
+            isOutsideMouseDown = true;
+        } else if (isOutsideMouseDown) {
+            isOutsideMouseDown = false;
+        }
+    }
+
+    function handleOutsideClick(e) {
+        if (
+            active &&
+            isOutsideMouseDown &&
+            !container?.contains(e.target) &&
+            !activeTrigger?.contains(e.target) &&
+            !e.target?.closest(".flatpickr-calendar")
+        ) {
+            hide();
+        }
+    }
+
     function handleFocusChange(e) {
-        return handleOutsideClick(e);
+        handleOutsideMousedown(e);
+        handleOutsideClick(e);
     }
 
     function bindTrigger(newTrigger) {
         cleanup();
 
-        activeTrigger = newTrigger || container?.parentNode;
-
-        if (!activeTrigger) {
-            return;
-        }
-
         container?.addEventListener("click", handleClickToggle);
-        activeTrigger.addEventListener("click", handleClickToggle);
-        activeTrigger.addEventListener("keydown", handleKeydownToggle);
+
+        activeTrigger = newTrigger || container?.parentNode;
+        activeTrigger?.addEventListener("click", handleClickToggle);
+        activeTrigger?.addEventListener("keydown", handleKeydownToggle);
     }
 
     function cleanup() {
-        if (!activeTrigger) {
-            return;
-        }
+        clearTimeout(scrollTimeoutId);
 
         container?.removeEventListener("click", handleClickToggle);
-        activeTrigger.removeEventListener("click", handleClickToggle);
-        activeTrigger.removeEventListener("keydown", handleKeydownToggle);
+        activeTrigger?.removeEventListener("click", handleClickToggle);
+        activeTrigger?.removeEventListener("keydown", handleKeydownToggle);
     }
 
     onMount(() => {
@@ -121,15 +152,20 @@
     });
 </script>
 
-<svelte:window on:click={handleOutsideClick} on:keydown={handleEscPress} on:focusin={handleFocusChange} />
+<svelte:window
+    on:mousedown={handleOutsideMousedown}
+    on:click={handleOutsideClick}
+    on:keydown={handleEscPress}
+    on:focusin={handleFocusChange}
+/>
 
-<div bind:this={container} class="toggler-container">
+<div bind:this={container} class="toggler-container" tabindex="-1">
     {#if active}
         <div
+            bind:this={containerChild}
             class={classes}
             class:active
-            in:fly|local={{ duration: 150, y: -5 }}
-            out:fly|local={{ duration: 150, y: 2 }}
+            transition:fly|local={{ duration: 150, y: 3 }}
         >
             <slot />
         </div>

@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v5"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/daos"
 	"github.com/pocketbase/pocketbase/models"
 	"github.com/pocketbase/pocketbase/tests"
 	"github.com/pocketbase/pocketbase/tools/hook"
@@ -253,7 +255,10 @@ func TestRealtimeAuthRecordDeleteEvent(t *testing.T) {
 	client.Set(apis.ContextAuthRecordKey, authRecord)
 	testApp.SubscriptionsBroker().Register(client)
 
-	testApp.OnModelAfterDelete().Trigger(&core.ModelEvent{Dao: testApp.Dao(), Model: authRecord})
+	e := new(core.ModelEvent)
+	e.Dao = testApp.Dao()
+	e.Model = authRecord
+	testApp.OnModelAfterDelete().Trigger(e)
 
 	if len(testApp.SubscriptionsBroker().Clients()) != 0 {
 		t.Fatalf("Expected no subscription clients, found %d", len(testApp.SubscriptionsBroker().Clients()))
@@ -282,7 +287,10 @@ func TestRealtimeAuthRecordUpdateEvent(t *testing.T) {
 	}
 	authRecord2.SetEmail("new@example.com")
 
-	testApp.OnModelAfterUpdate().Trigger(&core.ModelEvent{Dao: testApp.Dao(), Model: authRecord2})
+	e := new(core.ModelEvent)
+	e.Dao = testApp.Dao()
+	e.Model = authRecord2
+	testApp.OnModelAfterUpdate().Trigger(e)
 
 	clientAuthRecord, _ := client.Get(apis.ContextAuthRecordKey).(*models.Record)
 	if clientAuthRecord.Email() != authRecord2.Email() {
@@ -305,7 +313,10 @@ func TestRealtimeAdminDeleteEvent(t *testing.T) {
 	client.Set(apis.ContextAdminKey, admin)
 	testApp.SubscriptionsBroker().Register(client)
 
-	testApp.OnModelAfterDelete().Trigger(&core.ModelEvent{Dao: testApp.Dao(), Model: admin})
+	e := new(core.ModelEvent)
+	e.Dao = testApp.Dao()
+	e.Model = admin
+	testApp.OnModelAfterDelete().Trigger(e)
 
 	if len(testApp.SubscriptionsBroker().Clients()) != 0 {
 		t.Fatalf("Expected no subscription clients, found %d", len(testApp.SubscriptionsBroker().Clients()))
@@ -334,10 +345,106 @@ func TestRealtimeAdminUpdateEvent(t *testing.T) {
 	}
 	admin2.Email = "new@example.com"
 
-	testApp.OnModelAfterUpdate().Trigger(&core.ModelEvent{Dao: testApp.Dao(), Model: admin2})
+	e := new(core.ModelEvent)
+	e.Dao = testApp.Dao()
+	e.Model = admin2
+	testApp.OnModelAfterUpdate().Trigger(e)
 
 	clientAdmin, _ := client.Get(apis.ContextAdminKey).(*models.Admin)
 	if clientAdmin.Email != admin2.Email {
 		t.Fatalf("Expected authRecord with email %q, got %q", admin2.Email, clientAdmin.Email)
+	}
+}
+
+// Custom auth record model struct
+// -------------------------------------------------------------------
+var _ models.Model = (*CustomUser)(nil)
+
+type CustomUser struct {
+	models.BaseModel
+
+	Email string `db:"email" json:"email"`
+}
+
+func (m *CustomUser) TableName() string {
+	return "users" // the name of your collection
+}
+
+func findCustomUserByEmail(dao *daos.Dao, email string) (*CustomUser, error) {
+	model := &CustomUser{}
+
+	err := dao.ModelQuery(model).
+		AndWhere(dbx.HashExp{"email": email}).
+		Limit(1).
+		One(model)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return model, nil
+}
+
+func TestRealtimeCustomAuthModelDeleteEvent(t *testing.T) {
+	testApp, _ := tests.NewTestApp()
+	defer testApp.Cleanup()
+
+	apis.InitApi(testApp)
+
+	authRecord, err := testApp.Dao().FindFirstRecordByData("users", "email", "test@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := subscriptions.NewDefaultClient()
+	client.Set(apis.ContextAuthRecordKey, authRecord)
+	testApp.SubscriptionsBroker().Register(client)
+
+	// refetch the authRecord as CustomUser
+	customUser, err := findCustomUserByEmail(testApp.Dao(), "test@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// delete the custom user (should unset the client auth record)
+	if err := testApp.Dao().Delete(customUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(testApp.SubscriptionsBroker().Clients()) != 0 {
+		t.Fatalf("Expected no subscription clients, found %d", len(testApp.SubscriptionsBroker().Clients()))
+	}
+}
+
+func TestRealtimeCustomAuthModelUpdateEvent(t *testing.T) {
+	testApp, _ := tests.NewTestApp()
+	defer testApp.Cleanup()
+
+	apis.InitApi(testApp)
+
+	authRecord, err := testApp.Dao().FindFirstRecordByData("users", "email", "test@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := subscriptions.NewDefaultClient()
+	client.Set(apis.ContextAuthRecordKey, authRecord)
+	testApp.SubscriptionsBroker().Register(client)
+
+	// refetch the authRecord as CustomUser
+	customUser, err := findCustomUserByEmail(testApp.Dao(), "test@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// change its email
+	customUser.Email = "new@example.com"
+	if err := testApp.Dao().Save(customUser); err != nil {
+		t.Fatal(err)
+	}
+
+	clientAuthRecord, _ := client.Get(apis.ContextAuthRecordKey).(*models.Record)
+	if clientAuthRecord.Email() != customUser.Email {
+		t.Fatalf("Expected authRecord with email %q, got %q", customUser.Email, clientAuthRecord.Email())
 	}
 }

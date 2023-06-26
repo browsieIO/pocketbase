@@ -6,11 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/daos"
 	"github.com/pocketbase/pocketbase/models"
 	"github.com/pocketbase/pocketbase/models/schema"
 	"github.com/pocketbase/pocketbase/tests"
 	"github.com/pocketbase/pocketbase/tools/list"
+	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 func TestCollectionQuery(t *testing.T) {
@@ -165,9 +167,9 @@ func TestDeleteCollection(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	defer app.Cleanup()
 
-	colEmpty := &models.Collection{}
+	colUnsaved := &models.Collection{}
 
-	colAuth, err := app.Dao().FindCollectionByNameOrId("clients")
+	colAuth, err := app.Dao().FindCollectionByNameOrId("users")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +188,17 @@ func TestDeleteCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	colView, err := app.Dao().FindCollectionByNameOrId("view1")
+	colBase, err := app.Dao().FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	colView1, err := app.Dao().FindCollectionByNameOrId("view1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	colView2, err := app.Dao().FindCollectionByNameOrId("view2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,11 +207,14 @@ func TestDeleteCollection(t *testing.T) {
 		model       *models.Collection
 		expectError bool
 	}{
-		{colEmpty, true},
-		{colAuth, false},
+		{colUnsaved, true},
 		{colReferenced, true},
 		{colSystem, true},
-		{colView, false},
+		{colView1, true}, // view2 depend on it
+		{colView2, false},
+		{colView1, false}, // no longer has dependent collections
+		{colBase, false},
+		{colAuth, false}, // should delete also its related external auths
 	}
 
 	for i, s := range scenarios {
@@ -217,6 +232,19 @@ func TestDeleteCollection(t *testing.T) {
 
 		if app.Dao().HasTable(s.model.Name) {
 			t.Errorf("[%d] Expected table/view %s to be deleted", i, s.model.Name)
+		}
+
+		// check if the external auths were deleted
+		if s.model.IsAuth() {
+			var total int
+			err := app.Dao().ExternalAuthQuery().
+				Select("count(*)").
+				AndWhere(dbx.HashExp{"collectionId": s.model.Id}).
+				Row(&total)
+
+			if err != nil || total > 0 {
+				t.Fatalf("[%d] Expected external auths to be deleted, got %v (%v)", i, total, err)
+			}
 		}
 	}
 }
@@ -252,7 +280,7 @@ func TestSaveCollectionCreate(t *testing.T) {
 	}
 
 	// check if the records table has the schema fields
-	columns, err := app.Dao().GetTableColumns(collection.Name)
+	columns, err := app.Dao().TableColumns(collection.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +319,7 @@ func TestSaveCollectionUpdate(t *testing.T) {
 
 	// check if the records table has the schema fields
 	expectedColumns := []string{"id", "created", "updated", "title_update", "test", "files"}
-	columns, err := app.Dao().GetTableColumns(collection.Name)
+	columns, err := app.Dao().TableColumns(collection.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,6 +329,66 @@ func TestSaveCollectionUpdate(t *testing.T) {
 	for i, c := range columns {
 		if !list.ExistInSlice(c, expectedColumns) {
 			t.Fatalf("[%d] Didn't expect record column %s", i, c)
+		}
+	}
+}
+
+// indirect update of a field used in view should cause view(s) update
+func TestSaveCollectionIndirectViewsUpdate(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	collection, err := app.Dao().FindCollectionByNameOrId("demo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// update MaxSelect fields
+	{
+		relMany := collection.Schema.GetFieldByName("rel_many")
+		relManyOpt := relMany.Options.(*schema.RelationOptions)
+		relManyOpt.MaxSelect = types.Pointer(1)
+
+		fileOne := collection.Schema.GetFieldByName("file_one")
+		fileOneOpt := fileOne.Options.(*schema.FileOptions)
+		fileOneOpt.MaxSelect = 10
+
+		if err := app.Dao().SaveCollection(collection); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// check view1 schema
+	{
+		view1, err := app.Dao().FindCollectionByNameOrId("view1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		relMany := view1.Schema.GetFieldByName("rel_many")
+		relManyOpt := relMany.Options.(*schema.RelationOptions)
+		if relManyOpt.MaxSelect == nil || *relManyOpt.MaxSelect != 1 {
+			t.Fatalf("Expected view1.rel_many MaxSelect to be %d, got %v", 1, relManyOpt.MaxSelect)
+		}
+
+		fileOne := view1.Schema.GetFieldByName("file_one")
+		fileOneOpt := fileOne.Options.(*schema.FileOptions)
+		if fileOneOpt.MaxSelect != 10 {
+			t.Fatalf("Expected view1.file_one MaxSelect to be %d, got %v", 10, fileOneOpt.MaxSelect)
+		}
+	}
+
+	// check view2 schema
+	{
+		view2, err := app.Dao().FindCollectionByNameOrId("view2")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		relMany := view2.Schema.GetFieldByName("rel_many")
+		relManyOpt := relMany.Options.(*schema.RelationOptions)
+		if relManyOpt.MaxSelect == nil || *relManyOpt.MaxSelect != 1 {
+			t.Fatalf("Expected view2.rel_many MaxSelect to be %d, got %v", 1, relManyOpt.MaxSelect)
 		}
 	}
 }

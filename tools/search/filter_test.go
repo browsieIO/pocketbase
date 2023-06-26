@@ -40,7 +40,8 @@ func TestFilterDataBuildExpr(t *testing.T) {
 		},
 		{
 			"simple expression",
-			"test1 > 1", false,
+			"test1 > 1",
+			false,
 			"^" +
 				regexp.QuoteMeta("[[test1]] > {:") +
 				".+" +
@@ -48,15 +49,23 @@ func TestFilterDataBuildExpr(t *testing.T) {
 				"$",
 		},
 		{
+			"empty string vs null",
+			"'' = null && null != ''",
+			false,
+			"('' = '' AND '' != '')",
+		},
+		{
 			"like with 2 columns",
-			"test1 ~ test2", false,
+			"test1 ~ test2",
+			false,
 			"^" +
 				regexp.QuoteMeta("[[test1]] LIKE ('%' || [[test2]] || '%') ESCAPE '\\'") +
 				"$",
 		},
 		{
 			"like with right column operand",
-			"'lorem' ~ test1", false,
+			"'lorem' ~ test1",
+			false,
 			"^" +
 				regexp.QuoteMeta("{:") +
 				".+" +
@@ -65,7 +74,8 @@ func TestFilterDataBuildExpr(t *testing.T) {
 		},
 		{
 			"like with left column operand and text as right operand",
-			"test1 ~ 'lorem'", false,
+			"test1 ~ 'lorem'",
+			false,
 			"^" +
 				regexp.QuoteMeta("[[test1]] LIKE {:") +
 				".+" +
@@ -74,14 +84,16 @@ func TestFilterDataBuildExpr(t *testing.T) {
 		},
 		{
 			"not like with 2 columns",
-			"test1 !~ test2", false,
+			"test1 !~ test2",
+			false,
 			"^" +
 				regexp.QuoteMeta("[[test1]] NOT LIKE ('%' || [[test2]] || '%') ESCAPE '\\'") +
 				"$",
 		},
 		{
 			"not like with right column operand",
-			"'lorem' !~ test1", false,
+			"'lorem' !~ test1",
+			false,
 			"^" +
 				regexp.QuoteMeta("{:") +
 				".+" +
@@ -90,7 +102,8 @@ func TestFilterDataBuildExpr(t *testing.T) {
 		},
 		{
 			"like with left column operand and text as right operand",
-			"test1 !~ 'lorem'", false,
+			"test1 !~ 'lorem'",
+			false,
 			"^" +
 				regexp.QuoteMeta("[[test1]] NOT LIKE {:") +
 				".+" +
@@ -99,7 +112,8 @@ func TestFilterDataBuildExpr(t *testing.T) {
 		},
 		{
 			"current datetime constant",
-			"test1 > @now", false,
+			"test1 > @now",
+			false,
 			"^" +
 				regexp.QuoteMeta("[[test1]] > {:") +
 				".+" +
@@ -113,18 +127,18 @@ func TestFilterDataBuildExpr(t *testing.T) {
 			"^" +
 				regexp.QuoteMeta("(([[test1]] > {:") +
 				".+" +
-				regexp.QuoteMeta("} OR COALESCE([[test2]], '') != COALESCE({:") +
+				regexp.QuoteMeta("} OR [[test2]] != {:") +
 				".+" +
-				regexp.QuoteMeta("}, '')) AND [[test3]] LIKE {:") +
+				regexp.QuoteMeta("}) AND [[test3]] LIKE {:") +
 				".+" +
-				regexp.QuoteMeta("} ESCAPE '\\' AND COALESCE([[test4.sub]], '') = COALESCE(NULL, ''))") +
+				regexp.QuoteMeta("} ESCAPE '\\' AND ([[test4.sub]] = '' OR [[test4.sub]] IS NULL))") +
 				"$",
 		},
 		{
 			"combination of special literals (null, true, false)",
-			"test1=true && test2 != false && test3 = null || test4.sub != null",
+			"test1=true && test2 != false && null = test3 || null != test4.sub",
 			false,
-			"^" + regexp.QuoteMeta("(COALESCE([[test1]], '') = COALESCE(1, '') AND COALESCE([[test2]], '') != COALESCE(0, '') AND COALESCE([[test3]], '') = COALESCE(NULL, '') OR COALESCE([[test4.sub]], '') != COALESCE(NULL, ''))") + "$",
+			"^" + regexp.QuoteMeta("([[test1]] = 1 AND [[test2]] != 0 AND ('' = [[test3]] OR [[test3]] IS NULL) OR ('' != [[test4.sub]] AND [[test4.sub]] IS NOT NULL))") + "$",
 		},
 		{
 			"all operators",

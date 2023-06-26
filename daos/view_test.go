@@ -5,11 +5,32 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/daos"
 	"github.com/pocketbase/pocketbase/models"
 	"github.com/pocketbase/pocketbase/models/schema"
 	"github.com/pocketbase/pocketbase/tests"
 	"github.com/pocketbase/pocketbase/tools/list"
 )
+
+func ensureNoTempViews(app core.App, t *testing.T) {
+	var total int
+
+	err := app.Dao().DB().Select("count(*)").
+		From("sqlite_schema").
+		AndWhere(dbx.HashExp{"type": "view"}).
+		AndWhere(dbx.NewExp(`[[name]] LIKE '%\_temp\_%' ESCAPE '\'`)).
+		Limit(1).
+		Row(&total)
+	if err != nil {
+		t.Fatalf("Failed to check for temp views: %v", err)
+	}
+
+	if total > 0 {
+		t.Fatalf("Expected all temp views to be deleted, got %d", total)
+	}
+}
 
 func TestDeleteView(t *testing.T) {
 	app, _ := tests.NewTestApp()
@@ -34,6 +55,8 @@ func TestDeleteView(t *testing.T) {
 			t.Errorf("[%d - %q] Expected hasErr %v, got %v (%v)", i, s.viewName, s.expectError, hasErr, err)
 		}
 	}
+
+	ensureNoTempViews(app, t)
 }
 
 func TestSaveView(t *testing.T) {
@@ -78,7 +101,7 @@ func TestSaveView(t *testing.T) {
 		{
 			"missing table",
 			"123Test",
-			"select * from missing",
+			"select id from missing",
 			true,
 			nil,
 		},
@@ -136,7 +159,7 @@ func TestSaveView(t *testing.T) {
 			continue
 		}
 
-		infoRows, err := app.Dao().GetTableInfo(s.viewName)
+		infoRows, err := app.Dao().TableInfo(s.viewName)
 		if err != nil {
 			t.Errorf("[%s] Failed to fetch table info for %s: %v", s.scenarioName, s.viewName, err)
 			continue
@@ -153,6 +176,24 @@ func TestSaveView(t *testing.T) {
 			}
 		}
 	}
+
+	ensureNoTempViews(app, t)
+}
+
+func TestCreateViewSchemaWithDiscardedNestedTransaction(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	app.Dao().RunInTransaction(func(txDao *daos.Dao) error {
+		_, err := txDao.CreateViewSchema("select id from missing")
+		if err == nil {
+			t.Fatal("Expected error, got nil")
+		}
+
+		return nil
+	})
+
+	ensureNoTempViews(app, t)
 }
 
 func TestCreateViewSchema(t *testing.T) {
@@ -179,7 +220,7 @@ func TestCreateViewSchema(t *testing.T) {
 		},
 		{
 			"missing table",
-			"select * from missing",
+			"select id from missing",
 			true,
 			nil,
 		},
@@ -354,11 +395,10 @@ func TestCreateViewSchema(t *testing.T) {
 				created created_alias,
 				updated updated_alias,
 				123 as custom
-			from demo1
-			`,
+			from demo1`,
 			false,
 			map[string]string{
-				"id2":           schema.FieldTypeJson,
+				"id2":           schema.FieldTypeRelation,
 				"text_alias":    schema.FieldTypeText,
 				"url_alias":     schema.FieldTypeUrl,
 				"bool_alias":    schema.FieldTypeBool,
@@ -366,6 +406,37 @@ func TestCreateViewSchema(t *testing.T) {
 				"created_alias": schema.FieldTypeDate,
 				"updated_alias": schema.FieldTypeDate,
 				"custom":        schema.FieldTypeJson,
+			},
+		},
+		{
+			"query with distinct and reordered id column",
+			`select distinct
+				id as id2,
+				id,
+				123 as custom
+			from demo1`,
+			false,
+			map[string]string{
+				"id2":    schema.FieldTypeRelation,
+				"custom": schema.FieldTypeJson,
+			},
+		},
+		{
+			"query with aliasing the same field multiple times",
+			`select
+				a.id as id,
+				a.text as alias1,
+				a.text as alias2,
+				b.text as alias3,
+				b.text as alias4
+			from demo1 a
+			left join demo1 as b`,
+			false,
+			map[string]string{
+				"alias1": schema.FieldTypeText,
+				"alias2": schema.FieldTypeText,
+				"alias3": schema.FieldTypeText,
+				"alias4": schema.FieldTypeText,
 			},
 		},
 	}
@@ -403,6 +474,8 @@ func TestCreateViewSchema(t *testing.T) {
 			}
 		}
 	}
+
+	ensureNoTempViews(app, t)
 }
 
 func TestFindRecordByViewFile(t *testing.T) {

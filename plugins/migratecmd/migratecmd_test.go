@@ -6,11 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/daos"
 	"github.com/pocketbase/pocketbase/models"
 	"github.com/pocketbase/pocketbase/models/schema"
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/pocketbase/pocketbase/tests"
+	"github.com/pocketbase/pocketbase/tools/migrate"
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
@@ -31,6 +34,9 @@ migrate((db) => {
     "type": "auth",
     "system": true,
     "schema": [],
+    "indexes": [
+      "create index test on new_name (id)"
+    ],
     "listRule": "@request.auth.id != '' && created > 0 || 'backtick` + "`" + `test' = 0",
     "viewRule": "id = \"1\"",
     "createRule": null,
@@ -81,6 +87,9 @@ func init() {
 			"type": "auth",
 			"system": true,
 			"schema": [],
+			"indexes": [
+				"create index test on new_name (id)"
+			],
 			"listRule": "@request.auth.id != '' && created > 0 || ` + "'backtick` + \"`\" + `test' = 0" + `",
 			"viewRule": "id = \"1\"",
 			"createRule": null,
@@ -143,6 +152,7 @@ func init() {
 		collection.Updated = collection.Created
 		collection.ListRule = types.Pointer("@request.auth.id != '' && created > 0 || 'backtick`test' = 0")
 		collection.ViewRule = types.Pointer(`id = "1"`)
+		collection.Indexes = types.JsonArray[string]{"create index test on new_name (id)"}
 		collection.SetOptions(models.CollectionAuthOptions{
 			ManageRule:        types.Pointer("created > 0"),
 			MinPasswordLength: 20,
@@ -201,6 +211,9 @@ migrate((db) => {
     "type": "auth",
     "system": false,
     "schema": [],
+    "indexes": [
+      "create index test on test456 (id)"
+    ],
     "listRule": "@request.auth.id != '' && created > 0 || 'backtick` + "`" + `test' = 0",
     "viewRule": "id = \"1\"",
     "createRule": null,
@@ -255,6 +268,9 @@ func init() {
 			"type": "auth",
 			"system": false,
 			"schema": [],
+			"indexes": [
+				"create index test on test456 (id)"
+			],
 			"listRule": "@request.auth.id != '' && created > 0 || ` + "'backtick` + \"`\" + `test' = 0" + `",
 			"viewRule": "id = \"1\"",
 			"createRule": null,
@@ -305,6 +321,7 @@ func init() {
 		collection.Updated = collection.Created
 		collection.ListRule = types.Pointer("@request.auth.id != '' && created > 0 || 'backtick`test' = 0")
 		collection.ViewRule = types.Pointer(`id = "1"`)
+		collection.Indexes = types.JsonArray[string]{"create index test on test456 (id)"}
 		collection.SetOptions(models.CollectionAuthOptions{
 			ManageRule:        types.Pointer("created > 0"),
 			MinPasswordLength: 20,
@@ -367,6 +384,9 @@ migrate((db) => {
   collection.listRule = null
   collection.deleteRule = "updated > 0 && @request.auth.id != ''"
   collection.options = {}
+  collection.indexes = [
+    "create index test1 on test456_update (f1_name)"
+  ]
 
   // remove
   collection.schema.removeField("f3_id")
@@ -419,6 +439,9 @@ migrate((db) => {
     "onlyEmailDomains": null,
     "requireEmail": false
   }
+  collection.indexes = [
+    "create index test1 on test456 (f1_name)"
+  ]
 
   // add
   collection.schema.addField(new SchemaField({
@@ -488,6 +511,10 @@ func init() {
 		json.Unmarshal([]byte(` + "`" + `{}` + "`" + `), &options)
 		collection.SetOptions(options)
 
+		json.Unmarshal([]byte(` + "`" + `[
+			"create index test1 on test456_update (f1_name)"
+		]` + "`" + `), &collection.Indexes)
+
 		// remove
 		collection.Schema.RemoveField("f3_id")
 
@@ -554,6 +581,10 @@ func init() {
 		}` + "`" + `), &options)
 		collection.SetOptions(options)
 
+		json.Unmarshal([]byte(` + "`" + `[
+			"create index test1 on test456 (f1_name)"
+		]` + "`" + `), &collection.Indexes)
+
 		// add
 		del_f3_name := &schema.SchemaField{}
 		json.Unmarshal([]byte(` + "`" + `{
@@ -614,6 +645,7 @@ func init() {
 		collection.Updated = collection.Created
 		collection.ListRule = types.Pointer("@request.auth.id != '' && created > 0")
 		collection.ViewRule = types.Pointer(`id = "1"`)
+		collection.Indexes = types.JsonArray[string]{"create index test1 on test456 (f1_name)"}
 		collection.SetOptions(models.CollectionAuthOptions{
 			ManageRule:        types.Pointer("created > 0"),
 			MinPasswordLength: 20,
@@ -652,6 +684,9 @@ func init() {
 		collection.Type = models.CollectionTypeBase
 		collection.DeleteRule = types.Pointer(`updated > 0 && @request.auth.id != ''`)
 		collection.ListRule = nil
+		collection.Indexes = types.JsonArray[string]{
+			"create index test1 on test456_update (f1_name)",
+		}
 		collection.NormalizeOptions()
 		collection.Schema.RemoveField("f3_id")
 		collection.Schema.AddField(&schema.SchemaField{
@@ -742,5 +777,38 @@ func TestAutomigrateCollectionNoChanges(t *testing.T) {
 		if total := len(files); total != 0 {
 			t.Fatalf("[%d] Expected 0 files to be generated, got %d", i, total)
 		}
+	}
+}
+
+func TestInitialAutoSnapshot(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	migrationsDir := filepath.Join(app.DataDir(), "_test_auto_snapshot_")
+
+	migratecmd.MustRegister(app, nil, &migratecmd.Options{
+		TemplateLang: migratecmd.TemplateLangJS,
+		Automigrate:  true,
+		Dir:          migrationsDir,
+	})
+
+	app.Bootstrap()
+
+	app.OnBeforeServe().Trigger(&core.ServeEvent{
+		App: app,
+	})
+
+	var foundFiles []string
+
+	err := app.Dao().NonconcurrentDB().Select("file").
+		From(migrate.DefaultMigrationsTable).
+		Where(dbx.NewExp("file like '%collections_snapshot.js'")).
+		Column(&foundFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(foundFiles) != 1 {
+		t.Fatalf("Expected 1 collections_snapshot migration, found %v", foundFiles)
 	}
 }

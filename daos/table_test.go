@@ -35,7 +35,7 @@ func TestHasTable(t *testing.T) {
 	}
 }
 
-func TestGetTableColumns(t *testing.T) {
+func TestTableColumns(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	defer app.Cleanup()
 
@@ -48,7 +48,7 @@ func TestGetTableColumns(t *testing.T) {
 	}
 
 	for i, s := range scenarios {
-		columns, _ := app.Dao().GetTableColumns(s.tableName)
+		columns, _ := app.Dao().TableColumns(s.tableName)
 
 		if len(columns) != len(s.expected) {
 			t.Errorf("[%d] Expected columns %v, got %v", i, s.expected, columns)
@@ -63,7 +63,7 @@ func TestGetTableColumns(t *testing.T) {
 	}
 }
 
-func TestGetTableInfo(t *testing.T) {
+func TestTableInfo(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	defer app.Cleanup()
 
@@ -80,7 +80,7 @@ func TestGetTableInfo(t *testing.T) {
 	}
 
 	for i, s := range scenarios {
-		rows, _ := app.Dao().GetTableInfo(s.tableName)
+		rows, _ := app.Dao().TableInfo(s.tableName)
 
 		raw, _ := json.Marshal(rows)
 		rawStr := string(raw)
@@ -137,5 +137,47 @@ func TestVacuum(t *testing.T) {
 
 	if calledQueries[0] != "VACUUM" {
 		t.Fatalf("Expected VACUUM query, got %s", calledQueries[0])
+	}
+}
+
+func TestTableIndexes(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	scenarios := []struct {
+		table         string
+		expectError   bool
+		expectIndexes []string
+	}{
+		{
+			"missing",
+			false,
+			nil,
+		},
+		{
+			"demo2",
+			false,
+			[]string{"idx_demo2_created", "idx_unique_demo2_title", "idx_demo2_active"},
+		},
+	}
+
+	for _, s := range scenarios {
+		result, err := app.Dao().TableIndexes(s.table)
+
+		hasErr := err != nil
+		if hasErr != s.expectError {
+			t.Errorf("[%s] Expected hasErr %v, got %v", s.table, s.expectError, hasErr)
+		}
+
+		if len(s.expectIndexes) != len(result) {
+			t.Errorf("[%s] Expected %d indexes, got %d:\n%v", s.table, len(s.expectIndexes), len(result), result)
+			continue
+		}
+
+		for _, name := range s.expectIndexes {
+			if result[name] == "" {
+				t.Errorf("[%s] Missing index %q in \n%v", s.table, name, result)
+			}
+		}
 	}
 }

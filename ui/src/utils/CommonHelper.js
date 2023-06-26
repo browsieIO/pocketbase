@@ -32,6 +32,16 @@ export default class CommonHelper {
     }
 
     /**
+     * Deep clones the provided value.
+     *
+     * @param  {Mixed} val
+     * @return {Mixed}
+     */
+    static clone(value) {
+        return typeof structuredClone !== "undefined" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+    }
+
+    /**
      * Checks whether a value is empty. The following values are considered as empty:
      * - null
      * - undefined
@@ -275,7 +285,7 @@ export default class CommonHelper {
         const result = JSON.parse(JSON.stringify(obj || {}));
 
         for (let prop in result) {
-            if (typeof result[prop] === 'object' && result[prop] !== null) {
+            if (typeof result[prop] === "object" && result[prop] !== null) {
                 result[prop] = CommonHelper.filterRedactedProps(result[prop], mask)
             } else if (result[prop] === mask) {
                 delete result[prop];
@@ -303,7 +313,7 @@ export default class CommonHelper {
      */
     static getNestedVal(data, path, defaultVal = null, delimiter = ".") {
         let result = data || {};
-        let parts  = (path || '').split(delimiter);
+        let parts  = (path || "").split(delimiter);
 
         for (const part of parts) {
             if (
@@ -333,7 +343,7 @@ export default class CommonHelper {
      * @param  {String}       delimiter
      */
     static setByPath(data, path, newValue, delimiter = ".") {
-        if (data === null || typeof data !== 'object') {
+        if (data === null || typeof data !== "object") {
             console.warn("setByPath: data not an object or array.");
             return
         }
@@ -372,7 +382,7 @@ export default class CommonHelper {
      */
     static deleteByPath(data, path, delimiter = ".") {
         let result   = data || {};
-        let parts    = (path || '').split(delimiter);
+        let parts    = (path || "").split(delimiter);
         let lastPart = parts.pop();
 
         for (const part of parts) {
@@ -457,6 +467,27 @@ export default class CommonHelper {
     }
 
     /**
+     * Trims the matching quotes from the provided value.
+     *
+     * The value will be returned unchanged if `val` is not
+     * wrapped with quotes or it is not string.
+     *
+     * @param  {Mixed} val
+     * @return {Mixed}
+     */
+    static trimQuotedValue(val) {
+        if (
+            typeof val == "string" &&
+            (val[0] == `"`  || val[0] == `'` || val[0] == "`") &&
+            val[0] == val[val.length-1]
+        ) {
+            return val.slice(1, -1);
+        }
+
+        return val
+    }
+
+    /**
      * Returns the plain text version (aka. strip tags) of the provided string.
      *
      * @param  {String} str
@@ -502,7 +533,7 @@ export default class CommonHelper {
         for (let key in obj) {
             let value = obj[key];
 
-            if (typeof value === 'string') {
+            if (typeof value === "string") {
                 value = CommonHelper.truncate(value, 150, true);
             }
 
@@ -520,47 +551,47 @@ export default class CommonHelper {
      * @param  {Array}  [preserved]
      * @return {String}
      */
-    static slugify(str, delimiter = '_', preserved = ['.', '=', '-']) {
-        if (str === '') {
-            return '';
+    static slugify(str, delimiter = "_", preserved = [".", "=", "-"]) {
+        if (str === "") {
+            return "";
         }
 
         // special characters
         const specialCharsMap = {
-            'a': /а|à|á|å|â/gi,
-            'b': /б/gi,
-            'c': /ц|ç/gi,
-            'd': /д/gi,
-            'e': /е|è|é|ê|ẽ|ë/gi,
-            'f': /ф/gi,
-            'g': /г/gi,
-            'h': /х/gi,
-            'i': /й|и|ì|í|î/gi,
-            'j': /ж/gi,
-            'k': /к/gi,
-            'l': /л/gi,
-            'm': /м/gi,
-            'n': /н|ñ/gi,
-            'o': /о|ò|ó|ô|ø/gi,
-            'p': /п/gi,
-            'q': /я/gi,
-            'r': /р/gi,
-            's': /с/gi,
-            't': /т/gi,
-            'u': /ю|ù|ú|ů|û/gi,
-            'v': /в/gi,
-            'w': /в/gi,
-            'x': /ь/gi,
-            'y': /ъ/gi,
-            'z': /з/gi,
-            'ae': /ä|æ/gi,
-            'oe': /ö/gi,
-            'ue': /ü/gi,
-            'Ae': /Ä/gi,
-            'Ue': /Ü/gi,
-            'Oe': /Ö/gi,
-            'ss': /ß/gi,
-            'and': /&/gi
+            "a": /а|à|á|å|â/gi,
+            "b": /б/gi,
+            "c": /ц|ç/gi,
+            "d": /д/gi,
+            "e": /е|è|é|ê|ẽ|ë/gi,
+            "f": /ф/gi,
+            "g": /г/gi,
+            "h": /х/gi,
+            "i": /й|и|ì|í|î/gi,
+            "j": /ж/gi,
+            "k": /к/gi,
+            "l": /л/gi,
+            "m": /м/gi,
+            "n": /н|ñ/gi,
+            "o": /о|ò|ó|ô|ø/gi,
+            "p": /п/gi,
+            "q": /я/gi,
+            "r": /р/gi,
+            "s": /с/gi,
+            "t": /т/gi,
+            "u": /ю|ù|ú|ů|û/gi,
+            "v": /в/gi,
+            "w": /в/gi,
+            "x": /ь/gi,
+            "y": /ъ/gi,
+            "z": /з/gi,
+            "ae": /ä|æ/gi,
+            "oe": /ö/gi,
+            "ue": /ü/gi,
+            "Ae": /Ä/gi,
+            "Ue": /Ü/gi,
+            "Oe": /Ö/gi,
+            "ss": /ß/gi,
+            "and": /&/gi
         };
 
         // replace special characters
@@ -568,12 +599,10 @@ export default class CommonHelper {
             str = str.replace(specialCharsMap[k], k);
         }
 
-        const slug = str
-            .replace(new RegExp('[' + preserved.join('') + ']', 'g'), ' ') // replace preserved characters with spaces
-            .replace(/[^\w\ ]/gi, '')                                      // replaces all non-alphanumeric with empty string
+        return str
+            .replace(new RegExp('[' + preserved.join("") + ']', 'g'), ' ') // replace preserved characters with spaces
+            .replace(/[^\w\ ]/gi, "")                                      // replaces all non-alphanumeric with empty string
             .replace(/\s+/g, delimiter);                                   // collapse whitespaces and replace with `delimiter`
-
-        return slug.charAt(0).toLowerCase() + slug.slice(1);
     }
 
     /**
@@ -637,7 +666,7 @@ export default class CommonHelper {
      * @return {String}
      */
     static getInitials(str) {
-        str = (str || '').split('@')[0].trim();
+        str = (str || "").split("@")[0].trim();
 
         if (str.length <= 2) {
             return str.toUpperCase();
@@ -653,21 +682,33 @@ export default class CommonHelper {
     }
 
     /**
+     * Returns a human readable file size string from size in bytes.
+     *
+     * @param  {Number} size s
+     * @return {String}
+     */
+    static formattedFileSize(size) {
+        const i = size ? Math.floor(Math.log(size) / Math.log(1024)) : 0;
+
+        return (size / Math.pow(1024, i)).toFixed(2) * 1 + " " + ["B", "KB", "MB", "GB", "TB"][i];
+    }
+
+    /**
      * Returns a DateTime instance from a date object/string.
      *
      * @param  {String|Date} date
      * @return {DateTime}
      */
     static getDateTime(date) {
-        if (typeof date === 'string') {
+        if (typeof date === "string") {
             const formats = {
                 19: "yyyy-MM-dd HH:mm:ss",
                 23: "yyyy-MM-dd HH:mm:ss.SSS",
-                20: "yyyy-MM-dd HH:mm:ssZ",
-                24: "yyyy-MM-dd HH:mm:ss.SSSZ",
+                20: "yyyy-MM-dd HH:mm:ss'Z'",
+                24: "yyyy-MM-dd HH:mm:ss.SSS'Z'",
             }
             const format = formats[date.length] || formats[19];
-            return DateTime.fromFormat(date, format, { zone: 'UTC' });
+            return DateTime.fromFormat(date, format, { zone: "UTC" });
         }
 
         return DateTime.fromJSDate(date);
@@ -680,7 +721,7 @@ export default class CommonHelper {
      * @param  {String}      [format] The result format (see https://moment.github.io/luxon/#/parsing?id=table-of-tokens)
      * @return {String}
      */
-    static formatToUTCDate(date, format = 'yyyy-MM-dd HH:mm:ss') {
+    static formatToUTCDate(date, format = "yyyy-MM-dd HH:mm:ss") {
         return CommonHelper.getDateTime(date).toUTC().toFormat(format);
     }
 
@@ -691,7 +732,7 @@ export default class CommonHelper {
      * @param  {String}      [format] The result format (see https://moment.github.io/luxon/#/parsing?id=table-of-tokens)
      * @return {String}
      */
-    static formatToLocalDate(date, format = 'yyyy-MM-dd HH:mm:ss') {
+    static formatToLocalDate(date, format = "yyyy-MM-dd HH:mm:ss") {
         return CommonHelper.getDateTime(date).toLocal().toFormat(format);
     }
 
@@ -714,19 +755,31 @@ export default class CommonHelper {
     }
 
     /**
+     * Forces the browser to start downloading the specified url.
+     *
+     * @param {String} url  The url of the file to download.
+     * @param {String} name The result file name.
+     */
+    static download(url, name) {
+        const tempLink = document.createElement("a");
+        tempLink.setAttribute("href", url);
+        tempLink.setAttribute("download", name);
+        tempLink.click();
+        tempLink.remove();
+    }
+
+    /**
      * Downloads a json file created from the provide object.
      *
      * @param {mixed} obj   The JS object to download.
-     * @param {String} name  The result file name.
+     * @param {String} name The result file name.
      */
     static downloadJson(obj, name) {
         const encodedObj = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(obj, null, 2));
 
-        const tempLink = document.createElement('a');
-        tempLink.setAttribute("href", encodedObj);
-        tempLink.setAttribute("download", name + ".json");
-        tempLink.click();
-        tempLink.remove();
+        name = name.endsWith(".json") ? name : (name + ".json");
+
+        CommonHelper.download(encodedObj, name)
     }
 
     /**
@@ -736,7 +789,7 @@ export default class CommonHelper {
      * @return {Object}
      */
     static getJWTPayload(jwt) {
-        const raw = (jwt || '').split(".")[1] || '';
+        const raw = (jwt || "").split(".")[1] || "";
         if (raw === "") {
             return {};
         }
@@ -904,12 +957,12 @@ export default class CommonHelper {
             dummy["email"] = "test@example.com";
         }
 
-        const hasCreated = !collection?.isView || CommonHelper.extractColumnsFromQuery(collection?.options?.query).includes("created");
+        const hasCreated = !collection?.$isView || CommonHelper.extractColumnsFromQuery(collection?.options?.query).includes("created");
         if (hasCreated) {
             dummy["created"] = "2022-01-01 01:00:00.123Z";
         }
 
-        const hasUpdated = !collection?.isView || CommonHelper.extractColumnsFromQuery(collection?.options?.query).includes("updated");
+        const hasUpdated = !collection?.$isView || CommonHelper.extractColumnsFromQuery(collection?.options?.query).includes("updated");
         if (hasUpdated) {
             dummy["updated"] = "2022-01-01 23:59:59.456Z";
         }
@@ -1257,9 +1310,9 @@ export default class CommonHelper {
                 "table",
                 "code",
                 "codesample",
+                "directionality",
             ],
-            toolbar:
-                "undo redo | styles | alignleft aligncenter alignright | bold italic forecolor backcolor | bullist numlist | link image table codesample | code fullscreen",
+            toolbar: "styles | alignleft aligncenter alignright | bold italic forecolor backcolor | bullist numlist | link image table codesample direction | code fullscreen",
             file_picker_types: "image",
             // @see https://www.tiny.cloud/docs/tinymce/6/file-image-upload/#interactive-example
             file_picker_callback: (cb, value, meta) => {
@@ -1293,6 +1346,55 @@ export default class CommonHelper {
 
                 input.click();
             },
+            setup: (editor) => {
+                editor.on('keydown', (e) => {
+                    // propagate save shortcut to the parent
+                    if ((e.ctrlKey || e.metaKey) && e.code == "KeyS" && editor.formElement) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        editor.formElement.dispatchEvent(new KeyboardEvent("keydown", e));
+                    }
+                });
+
+                const lastDirectionKey = "tinymce_last_direction";
+
+                // load last used text direction for blank editors
+                editor.on('init', () => {
+                    const lastDirection = window?.localStorage?.getItem(lastDirectionKey);
+                    if (!editor.isDirty() && editor.getContent() == "" && lastDirection == "rtl") {
+                        editor.execCommand("mceDirectionRTL");
+                    }
+                });
+
+                // text direction dropdown
+                editor.ui.registry.addMenuButton("direction", {
+                    icon: "visualchars",
+                    fetch: (callback) => {
+                        const items = [
+                            {
+                                type: "menuitem",
+                                text: "LTR content",
+                                icon: "ltr",
+                                onAction: () => {
+                                    window?.localStorage?.setItem(lastDirectionKey, "ltr");
+                                    tinymce.activeEditor.execCommand("mceDirectionLTR");
+                                }
+                            },
+                            {
+                                type: "menuitem",
+                                text: "RTL content",
+                                icon: "rtl",
+                                onAction: () => {
+                                    window?.localStorage?.setItem(lastDirectionKey, "rtl");
+                                    tinymce.activeEditor.execCommand("mceDirectionRTL");
+                                }
+                            }
+                        ];
+
+                        callback(items);
+                    }
+                });
+            },
         };
     }
 
@@ -1315,16 +1417,9 @@ export default class CommonHelper {
                 continue
             }
 
-            if (CommonHelper.isEmpty(val)) {
-                result.push(missingValue);
-            } else if (typeof val === "boolean")  {
-                result.push(val ? "True" : "False");
-            } else if (typeof val === "string") {
-                val = val.indexOf("<") >= 0 ? CommonHelper.plainText(val) : val;
-                result.push(CommonHelper.truncate(val));
-            } else {
-                result.push(val);
-            }
+            val = CommonHelper.stringifyValue(val, missingValue)
+
+            result.push(val);
         }
 
         if (result.length > 0) {
@@ -1334,21 +1429,60 @@ export default class CommonHelper {
         const fallbackProps = [
             "title",
             "name",
+            "slug",
             "email",
             "username",
-            "heading",
             "label",
+            "heading",
+            "message",
             "key",
             "id",
         ];
 
         for (const prop of fallbackProps) {
-            if (!CommonHelper.isEmpty(model[prop])) {
-                return model[prop];
+            let val = CommonHelper.stringifyValue(model[prop], "");
+            if (val) {
+                return val;
             }
         }
 
         return missingValue;
+    }
+
+    /**
+     * Stringifies the provided value or fallback to missingValue in case it is empty.
+     *
+     * @param  {Mixed}  val
+     * @param  {String} missingValue
+     * @return {String}
+     */
+    static stringifyValue(val, missingValue = "N/A") {
+        if (CommonHelper.isEmpty(val)) {
+            return missingValue;
+        }
+
+        if (typeof val === "boolean")  {
+            return val ? "True" : "False";
+        }
+
+        if (typeof val === "string") {
+            val = val.indexOf("<") >= 0 ? CommonHelper.plainText(val) : val;
+            return CommonHelper.truncate(val) || missingValue;
+        }
+
+        if (Array.isArray(val)) {
+            return val.join(",");
+        }
+
+        if (typeof val === "object") {
+            try {
+                return CommonHelper.truncate(JSON.stringify(val)) || missingValue;
+            } catch (_) {
+                return missingValue;
+            }
+        }
+
+        return "" + val;
     }
 
     /**
@@ -1393,16 +1527,16 @@ export default class CommonHelper {
      */
     static getAllCollectionIdentifiers(collection, prefix = "") {
         if (!collection) {
-            return;
+            return [];
         }
 
         let result = [prefix + "id"];
 
-        if (collection.isView) {
+        if (collection.$isView) {
             for (let col of CommonHelper.extractColumnsFromQuery(collection.options.query)) {
                 CommonHelper.pushUnique(result, prefix + col);
             }
-        } else if (collection.isAuth) {
+        } else if (collection.$isAuth) {
             result.push(prefix + "username");
             result.push(prefix + "email");
             result.push(prefix + "emailVisibility");
@@ -1421,5 +1555,239 @@ export default class CommonHelper {
         }
 
         return result;
+    }
+
+    /**
+     * Parses the specified SQL index and returns an object with its components.
+     *
+     * For example:
+     *
+     * ```js
+     * parseIndex("CREATE UNIQUE INDEX IF NOT EXISTS schemaname.idxname on tablename (col1, col2) where expr")
+     * // output:
+     * {
+     *   "unique":     true,
+     *   "optional":   true,
+     *   "schemaName": "schemaname"
+     *   "indexName":  "idxname"
+     *   "tableName":  "tablename"
+     *   "columns":    [{name: "col1", "collate": "", "sort": ""}, {name: "col1", "collate": "", "sort": ""}]
+     *   "where":      "expr"
+     * }
+     * ```
+     *
+     * @param  {String} idx
+     * @return {Object}
+     */
+    static parseIndex(idx) {
+        const result = {
+            unique:     false,
+            optional:   false,
+            schemaName: "",
+            indexName:  "",
+            tableName:  "",
+            columns:    [],
+            where:      "",
+        };
+
+        const indexRegex = /create\s+(unique\s+)?\s*index\s*(if\s+not\s+exists\s+)?(\S*)\s+on\s+(\S*)\s+\(([\s\S]*)\)(?:\s*where\s+([\s\S]*))?/gmi;
+        const matches    = indexRegex.exec((idx || "").trim())
+
+        if (matches?.length != 7) {
+            return result;
+        }
+
+        const sqlQuoteRegex = /^[\"\'\`\[\{}]|[\"\'\`\]\}]$/gm
+
+        // unique
+        result.unique = matches[1]?.trim().toLowerCase() === "unique";
+
+        // optional
+        result.optional = !CommonHelper.isEmpty(matches[2]?.trim());
+
+        // schemaName and indexName
+        const namePair = (matches[3] || "").split(".");
+        if (namePair.length == 2) {
+            result.schemaName = namePair[0].replace(sqlQuoteRegex, "");
+            result.indexName = namePair[1].replace(sqlQuoteRegex, "");
+        } else {
+            result.schemaName = "";
+            result.indexName = namePair[0].replace(sqlQuoteRegex, "");
+        }
+
+        // tableName
+        result.tableName = (matches[4] || "").replace(sqlQuoteRegex, "");
+
+        // columns
+        const rawColumns = (matches[5] || "")
+            .replace(/,(?=[^\(]*\))/gmi, "{PB_TEMP}") // temporary replace comma within expressions for easier splitting
+            .split(",");                              // split columns
+
+        for (let col of rawColumns) {
+            col = col.trim().replaceAll("{PB_TEMP}", ",") // revert temp replacement
+
+            const colRegex = /^([\s\S]+?)(?:\s+collate\s+([\w]+))?(?:\s+(asc|desc))?$/gmi
+            const colMatches = colRegex.exec(col);
+            if (colMatches?.length != 4) {
+                continue
+            }
+
+            const colOrExpr = colMatches[1]?.trim()?.replace(sqlQuoteRegex, "");
+            if (!colOrExpr) {
+                continue;
+            }
+            result.columns.push({
+                name:    colOrExpr,
+                collate: colMatches[2] || "",
+                sort:    colMatches[3]?.toUpperCase() || "",
+            });
+        }
+
+        // WHERE expression
+        result.where = matches[6] || "";
+
+        return result;
+    }
+
+    /**
+     * Builds an index expression from parsed index parts (see parseIndex()).
+     *
+     * @param  {Array} indexParts
+     * @return {String}
+     */
+    static buildIndex(indexParts) {
+        let result = "CREATE ";
+
+        if (indexParts.unique) {
+            result += "UNIQUE ";
+        }
+
+        result += "INDEX ";
+
+        if (indexParts.optional) {
+            result += "IF NOT EXISTS ";
+        }
+
+        if (indexParts.schemaName) {
+            result += `\`${indexParts.schemaName}\`.`;
+        }
+
+        result += `\`${indexParts.indexName || "idx_" + CommonHelper.randomString(7)}\` `;
+
+        result += `ON \`${indexParts.tableName}\` (`;
+
+        const nonEmptyCols = indexParts.columns.filter((col) => !!col?.name);
+
+        if (nonEmptyCols.length > 1) {
+            result += "\n  ";
+        }
+
+        result += nonEmptyCols.map((col) => {
+                let item = "";
+
+                if (col.name.includes("(") || col.name.includes(" ")) {
+                    // most likely an expression
+                    item += col.name;
+                } else {
+                    // regular identifier
+                    item += ("`" + col.name + "`");
+                }
+
+                if (col.collate) {
+                    item += (" COLLATE " + col.collate);
+                }
+
+                if (col.sort) {
+                    item += (" " + col.sort.toUpperCase());
+                }
+
+                return item;
+            })
+            .join(",\n  ");
+
+        if (nonEmptyCols.length > 1) {
+            result += "\n";
+        }
+
+        result += `)`;
+
+        if (indexParts.where) {
+            result += ` WHERE ${indexParts.where}`;
+        }
+
+        return result;
+    }
+
+    /**
+     * Replaces the idx table name with newTableName.
+     *
+     * @param  {String} idx
+     * @param  {String} newTableName
+     * @return {String}
+     */
+    static replaceIndexTableName(idx, newTableName) {
+        const parsed = CommonHelper.parseIndex(idx);
+
+        parsed.tableName = newTableName;
+
+        return CommonHelper.buildIndex(parsed);
+    }
+
+    /**
+     * Replaces an idx column name with a new one (if exists).
+     *
+     * @param  {String} idx
+     * @param  {String} oldColumn
+     * @param  {String} newColumn
+     * @return {String}
+     */
+    static replaceIndexColumn(idx, oldColumn, newColumn) {
+        if (oldColumn === newColumn) {
+            return idx; // no change
+        }
+
+        const parsed = CommonHelper.parseIndex(idx);
+
+        let hasChange = false;
+        for (let col of parsed.columns) {
+            if (col.name === oldColumn) {
+                col.name = newColumn;
+                hasChange = true;
+            }
+        }
+
+        return hasChange ? CommonHelper.buildIndex(parsed) : idx;
+    }
+
+    /**
+     * Normalizes the search filter by converting a simple search term into
+     * a wildcard filter expression using the provided fallback search fields.
+     *
+     * If searchTerm is already an expression it is returned without changes.
+     *
+     * @param  {String} searchTerm
+     * @param  {Array}  fallbackFields
+     * @return {String}
+     */
+    static normalizeSearchFilter(searchTerm, fallbackFields) {
+        searchTerm = (searchTerm || "").trim();
+        if (!searchTerm || !fallbackFields.length) {
+            return searchTerm;
+        }
+
+        const opChars = ["=", "!=", "~", "!~", ">", ">=", "<", "<="];
+
+        // loosely check if it is already a filter expression
+        for (const op of opChars) {
+            if (searchTerm.includes(op)) {
+                return searchTerm;
+            }
+        }
+
+        searchTerm = isNaN(searchTerm) && searchTerm != "true" && searchTerm != "false"
+            ? `"${searchTerm.replace(/^[\"\'\`]|[\"\'\`]$/gm, "")}"`
+            : searchTerm;
+
+        return fallbackFields.map((f) => `${f}~${searchTerm}`).join("||");
     }
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/rest"
 	"github.com/pocketbase/pocketbase/ui"
 	"github.com/spf13/cast"
 )
@@ -25,6 +26,9 @@ const trailedAdminPath = "/_/"
 func InitApi(app core.App) (*echo.Echo, error) {
 	e := echo.New()
 	e.Debug = app.IsDebug()
+	e.JSONSerializer = &rest.Serializer{
+		FieldsParam: "fields",
+	}
 
 	// configure a custom router
 	e.ResetRouterCreator(func(ec *echo.Echo) echo.Router {
@@ -36,8 +40,8 @@ func InitApi(app core.App) (*echo.Echo, error) {
 	// default middlewares
 	e.Pre(middleware.RemoveTrailingSlashWithConfig(middleware.RemoveTrailingSlashConfig{
 		Skipper: func(c echo.Context) bool {
-			// ignore Admin UI route(s)
-			return strings.HasPrefix(c.Request().URL.Path, trailedAdminPath)
+			// enable by default only for the API routes
+			return !strings.HasPrefix(c.Request().URL.Path, "/api/")
 		},
 	}))
 	e.Use(middleware.Recover())
@@ -47,6 +51,9 @@ func InitApi(app core.App) (*echo.Echo, error) {
 	// custom error handler
 	e.HTTPErrorHandler = func(c echo.Context, err error) {
 		if c.Response().Committed {
+			if app.IsDebug() {
+				log.Println("HTTPErrorHandler response was already committed:", err)
+			}
 			return
 		}
 
@@ -107,6 +114,7 @@ func InitApi(app core.App) (*echo.Echo, error) {
 	bindRealtimeApi(app, api)
 	bindLogsApi(app, api)
 	bindHealthApi(app, api)
+	bindBackupApi(app, api)
 
 	// trigger the custom BeforeServe hook for the created api router
 	// allowing users to further adjust its options or register new routes
@@ -117,6 +125,10 @@ func InitApi(app core.App) (*echo.Echo, error) {
 	if err := app.OnBeforeServe().Trigger(serveEvent); err != nil {
 		return nil, err
 	}
+
+	// note: it is after the OnBeforeServe hook to ensure that the implicit
+	// cache is after any user custom defined middlewares
+	e.Use(eagerRequestDataCache(app))
 
 	// catch all any route
 	api.Any("/*", func(c echo.Context) error {
@@ -173,13 +185,14 @@ func bindStaticAdminUI(app core.App, e *echo.Echo) error {
 		trailedAdminPath+"*",
 		echo.StaticDirectoryHandler(ui.DistDirFS, false),
 		installerRedirect(app),
+		uiCacheControl(),
 		middleware.Gzip(),
 	)
 
 	return nil
 }
 
-const totalAdminsCacheKey = "totalAdmins"
+const totalAdminsCacheKey = "@totalAdmins"
 
 func updateTotalAdminsCache(app core.App) error {
 	total, err := app.Dao().TotalAdmins()
@@ -190,6 +203,20 @@ func updateTotalAdminsCache(app core.App) error {
 	app.Cache().Set(totalAdminsCacheKey, total)
 
 	return nil
+}
+
+func uiCacheControl() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			// add default Cache-Control header for all Admin UI resources
+			// (ignoring the root admin path)
+			if c.Request().URL.Path != trailedAdminPath {
+				c.Response().Header().Set("Cache-Control", "max-age=1209600, stale-while-revalidate=86400")
+			}
+
+			return next(c)
+		}
+	}
 }
 
 // installerRedirect redirects the user to the installer admin UI page

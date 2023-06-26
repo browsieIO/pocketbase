@@ -63,7 +63,11 @@ func (dao *Dao) SaveView(name string, selectQuery string) error {
 
 		// fetch the view table info to ensure that the view was created
 		// because missing tables or columns won't return an error
-		if _, err := txDao.GetTableInfo(name); err != nil {
+		if _, err := txDao.TableInfo(name); err != nil {
+			// manually cleanup previously created view in case the func
+			// is called in a nested transaction and the error is discarded
+			txDao.DeleteView(name)
+
 			return err
 		}
 
@@ -95,7 +99,7 @@ func (dao *Dao) CreateViewSchema(selectQuery string) (schema.Schema, error) {
 		defer txDao.DeleteView(tempView)
 
 		// extract the generated view table info
-		info, err := txDao.GetTableInfo(tempView)
+		info, err := txDao.TableInfo(tempView)
 		if err != nil {
 			return err
 		}
@@ -123,7 +127,7 @@ func (dao *Dao) CreateViewSchema(selectQuery string) (schema.Schema, error) {
 		}
 
 		if !hasId {
-			return errors.New("missing required id column (you ca use `(ROW_NUMBER() OVER()) as id` if you don't have one)")
+			return errors.New("missing required id column (you can use `(ROW_NUMBER() OVER()) as id` if you don't have one)")
 		}
 
 		return nil
@@ -189,15 +193,18 @@ func (dao *Dao) FindRecordByViewFile(
 
 	record := &models.Record{}
 
-	err = dao.RecordQuery(qf.collection).
-		InnerJoin(fmt.Sprintf(
-			// note: the case is used to normalize the value access
+	query := dao.RecordQuery(qf.collection).Limit(1)
+
+	if opt, ok := qf.original.Options.(schema.MultiValuer); !ok || !opt.IsMultiple() {
+		query.AndWhere(dbx.HashExp{cleanFieldName: filename})
+	} else {
+		query.InnerJoin(fmt.Sprintf(
 			`json_each(CASE WHEN json_valid([[%s]]) THEN [[%s]] ELSE json_array([[%s]]) END) as {{_je_file}}`,
 			cleanFieldName, cleanFieldName, cleanFieldName,
-		), dbx.HashExp{"_je_file.value": filename}).
-		Limit(1).
-		One(record)
-	if err != nil {
+		), dbx.HashExp{"_je_file.value": filename})
+	}
+
+	if err := query.One(record); err != nil {
 		return nil, err
 	}
 
@@ -272,16 +279,13 @@ func (dao *Dao) parseQueryToFields(selectQuery string) (map[string]*queryField, 
 
 		var fieldName string
 		var collection *models.Collection
-		var isMainTableField bool
 
 		if len(parts) == 2 {
 			fieldName = parts[1]
 			collection = collections[parts[0]]
-			isMainTableField = parts[0] == mainTable.alias
 		} else {
 			fieldName = parts[0]
 			collection = collections[mainTable.alias]
-			isMainTableField = true
 		}
 
 		// fallback to the default field if the found column is not from a collection schema
@@ -307,6 +311,7 @@ func (dao *Dao) parseQueryToFields(selectQuery string) (map[string]*queryField, 
 
 		if field != nil {
 			clone := *field
+			clone.Id = "" // unset to prevent duplications if the same field is aliased multiple times
 			clone.Name = col.alias
 			result[col.alias] = &queryField{
 				field:      &clone,
@@ -316,8 +321,8 @@ func (dao *Dao) parseQueryToFields(selectQuery string) (map[string]*queryField, 
 			continue
 		}
 
-		if fieldName == schema.FieldNameId && !isMainTableField {
-			// convert to relation since it is a direct id reference to non-maintable collection
+		if fieldName == schema.FieldNameId {
+			// convert to relation since it is a direct id reference
 			result[col.alias] = &queryField{
 				field: &schema.SchemaField{
 					Name: col.alias,
@@ -458,6 +463,8 @@ func (p *identifiersParser) parse(selectQuery string) error {
 			skip = false
 			partType = "select"
 			activeBuilder = &selectParts
+		case "distinct":
+			continue // ignore as it is not important for the identifiers parsing
 		case "from":
 			skip = false
 			partType = "from"
@@ -473,7 +480,7 @@ func (p *identifiersParser) parse(selectQuery string) error {
 			partType = "join"
 			activeBuilder = &joinParts
 		case "_discard_":
-			// do nothing...
+			// skip following tokens
 			skip = true
 		default:
 			isJoin := partType == "join"

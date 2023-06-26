@@ -7,7 +7,7 @@
     import { errors, setErrors, removeError } from "@/stores/errors";
     import { confirm } from "@/stores/confirmation";
     import { removeAllToasts, addSuccessToast } from "@/stores/toasts";
-    import { loadCollections, removeCollection } from "@/stores/collections";
+    import { addCollection, removeCollection } from "@/stores/collections";
     import tooltip from "@/actions/tooltip";
     import Field from "@/components/base/Field.svelte";
     import Toggler from "@/components/base/Toggler.svelte";
@@ -35,7 +35,6 @@
 
     let collectionPanel;
     let confirmChangesPanel;
-
     let original = null;
     let collection = new Collection();
     let isSaving = false;
@@ -51,11 +50,11 @@
         schemaTabError = "";
     }
 
-    $: isSystemUpdate = !collection.isNew && collection.system;
+    $: isSystemUpdate = !collection.$isNew && collection.system;
 
     $: hasChanges = initialFormHash != calculateFormHash(collection);
 
-    $: canSave = collection.isNew || hasChanges;
+    $: canSave = collection.$isNew || hasChanges;
 
     $: if (activeTab === TAB_OPTIONS && collection.type !== TYPE_AUTH) {
         // reset selected tab
@@ -63,10 +62,18 @@
     }
 
     $: if (collection.type === TYPE_VIEW) {
-        // reset create, update and delete rules
+        // reset non-view fields
         collection.createRule = null;
         collection.updateRule = null;
         collection.deleteRule = null;
+        collection.indexes = [];
+    }
+
+    // update indexes on collection rename
+    $: if (collection?.name && original?.name != collection?.name) {
+        collection.indexes = collection.indexes?.map((idx) =>
+            CommonHelper.replaceIndexTableName(idx, collection.name)
+        );
     }
 
     export function changeTab(newTab) {
@@ -92,7 +99,7 @@
 
         if (typeof model !== "undefined") {
             original = model;
-            collection = model?.clone();
+            collection = model.$clone();
         } else {
             original = null;
             collection = new Collection();
@@ -107,11 +114,11 @@
         initialFormHash = calculateFormHash(collection);
     }
 
-    function saveWithConfirm() {
-        if (collection.isNew) {
-            return save();
+    function saveConfirm() {
+        if (collection.$isNew) {
+            save();
         } else {
-            confirmChangesPanel?.show(collection);
+            confirmChangesPanel?.show(original, collection);
         }
     }
 
@@ -125,7 +132,7 @@
         const data = exportFormData();
 
         let request;
-        if (collection.isNew) {
+        if (collection.$isNew) {
             request = ApiClient.collections.create(data);
         } else {
             request = ApiClient.collections.update(collection.id, data);
@@ -135,22 +142,24 @@
             .then((result) => {
                 removeAllToasts();
 
-                loadCollections(result.id);
+                addCollection(result);
 
                 confirmClose = false;
                 hide();
 
                 addSuccessToast(
-                    collection.isNew ? "Successfully created collection." : "Successfully updated collection."
+                    collection.$isNew
+                        ? "Successfully created collection."
+                        : "Successfully updated collection."
                 );
 
                 dispatch("save", {
-                    isNew: collection.isNew,
+                    isNew: collection.$isNew,
                     collection: result,
                 });
             })
             .catch((err) => {
-                ApiClient.errorResponseHandler(err);
+                ApiClient.error(err);
             })
             .finally(() => {
                 isSaving = false;
@@ -158,7 +167,7 @@
     }
 
     function exportFormData() {
-        const data = collection.export();
+        const data = collection.$export();
         data.schema = data.schema.slice(0);
 
         // remove deleted fields
@@ -187,7 +196,7 @@
                     removeCollection(original);
                 })
                 .catch((err) => {
-                    ApiClient.errorResponseHandler(err);
+                    ApiClient.error(err);
                 });
         });
     }
@@ -214,7 +223,7 @@
     }
 
     async function duplicate() {
-        const clone = original?.clone();
+        const clone = original?.$clone();
 
         if (clone) {
             clone.id = "";
@@ -226,6 +235,16 @@
             if (!CommonHelper.isEmpty(clone.schema)) {
                 for (const field of clone.schema) {
                     field.id = "";
+                }
+            }
+
+            // update indexes with the new table name
+            if (!CommonHelper.isEmpty(clone.indexes)) {
+                for (let i = 0; i < clone.indexes.length; i++) {
+                    const parsed = CommonHelper.parseIndex(clone.indexes[i]);
+                    parsed.indexName = "idx_" + CommonHelper.randomString(7);
+                    parsed.tableName = clone.name;
+                    clone.indexes[i] = CommonHelper.buildIndex(parsed);
                 }
             }
         }
@@ -241,6 +260,8 @@
 <OverlayPanel
     bind:this={collectionPanel}
     class="overlay-panel-lg colored-header collection-panel"
+    escClose={false}
+    overlayClose={!isSaving}
     beforeHide={() => {
         if (hasChanges && confirmClose) {
             confirm("You have unsaved changes. Do you really want to close the panel?", () => {
@@ -256,10 +277,10 @@
 >
     <svelte:fragment slot="header">
         <h4 class="upsert-panel-title">
-            {collection.isNew ? "New collection" : "Edit collection"}
+            {collection.$isNew ? "New collection" : "Edit collection"}
         </h4>
 
-        {#if !collection.isNew && !collection.system}
+        {#if !collection.$isNew && !collection.system}
             <div class="flex-fill" />
             <button type="button" aria-label="More" class="btn btn-sm btn-circle btn-transparent flex-gap-0">
                 <i class="ri-more-line" />
@@ -283,7 +304,7 @@
         <form
             class="block"
             on:submit|preventDefault={() => {
-                canSave && saveWithConfirm();
+                canSave && saveConfirm();
             }}
         >
             <Field
@@ -300,8 +321,8 @@
                     required
                     disabled={isSystemUpdate}
                     spellcheck="false"
-                    autofocus={collection.isNew}
-                    placeholder={collection.isAuth ? `eg. "users"` : `eg. "posts"`}
+                    autofocus={collection.$isNew}
+                    placeholder={collection.$isAuth ? `eg. "users"` : `eg. "posts"`}
                     value={collection.name}
                     on:input={(e) => {
                         collection.name = CommonHelper.slugify(e.target.value);
@@ -312,15 +333,15 @@
                 <div class="form-field-addon">
                     <button
                         type="button"
-                        class="btn btn-sm p-r-10 p-l-10 {collection.isNew
+                        class="btn btn-sm p-r-10 p-l-10 {collection.$isNew
                             ? 'btn-outline'
                             : 'btn-transparent'}"
-                        disabled={!collection.isNew}
+                        disabled={!collection.$isNew}
                     >
                         <!-- empty span for alignment -->
                         <span />
                         <span class="txt">Type: {collectionTypes[collection.type] || "N/A"}</span>
-                        {#if collection.isNew}
+                        {#if collection.$isNew}
                             <i class="ri-arrow-down-s-fill" />
                             <Toggler class="dropdown dropdown-right dropdown-nowrap m-t-5">
                                 {#each Object.entries(collectionTypes) as [type, label]}
@@ -354,7 +375,7 @@
                 class:active={activeTab === TAB_SCHEMA}
                 on:click={() => changeTab(TAB_SCHEMA)}
             >
-                <span class="txt">{collection?.isView ? "Query" : "Fields"}</span>
+                <span class="txt">{collection?.$isView ? "Query" : "Fields"}</span>
                 {#if !CommonHelper.isEmpty(schemaTabError)}
                     <i
                         class="ri-error-warning-fill txt-danger"
@@ -380,7 +401,7 @@
                 {/if}
             </button>
 
-            {#if collection.isAuth}
+            {#if collection.$isAuth}
                 <button
                     type="button"
                     class="tab-item"
@@ -403,7 +424,7 @@
     <div class="tabs-content">
         <!-- avoid rerendering the fields tab -->
         <div class="tab-item" class:active={activeTab === TAB_SCHEMA}>
-            {#if collection.isView}
+            {#if collection.$isView}
                 <CollectionQueryTab bind:collection />
             {:else}
                 <CollectionFieldsTab bind:collection />
@@ -416,7 +437,7 @@
             </div>
         {/if}
 
-        {#if collection.isAuth}
+        {#if collection.$isAuth}
             <div class="tab-item" class:active={activeTab === TAB_OPTIONS}>
                 <CollectionAuthOptionsTab bind:collection />
             </div>
@@ -432,9 +453,9 @@
             class="btn btn-expanded"
             class:btn-loading={isSaving}
             disabled={!canSave || isSaving}
-            on:click={() => saveWithConfirm()}
+            on:click={() => saveConfirm()}
         >
-            <span class="txt">{collection.isNew ? "Create" : "Save changes"}</span>
+            <span class="txt">{collection.$isNew ? "Create" : "Save changes"}</span>
         </button>
     </svelte:fragment>
 </OverlayPanel>

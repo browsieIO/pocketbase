@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"net/mail"
 
@@ -23,6 +24,7 @@ type Microsoft struct {
 func NewMicrosoftProvider() *Microsoft {
 	endpoints := microsoft.AzureADEndpoint("")
 	return &Microsoft{&baseProvider{
+		ctx:        context.Background(),
 		scopes:     []string{"User.Read"},
 		authUrl:    endpoints.AuthURL,
 		tokenUrl:   endpoints.TokenURL,

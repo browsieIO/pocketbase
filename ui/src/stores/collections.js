@@ -2,9 +2,10 @@ import { writable } from "svelte/store";
 import ApiClient    from "@/utils/ApiClient";
 import CommonHelper from "@/utils/CommonHelper";
 
-export const collections          = writable([]);
-export const activeCollection     = writable({});
-export const isCollectionsLoading = writable(false);
+export const collections                    = writable([]);
+export const activeCollection               = writable({});
+export const isCollectionsLoading           = writable(false);
+export const protectedFilesCollectionsCache = writable({});
 
 export function changeActiveCollectionById(collectionId) {
     collections.update((list) => {
@@ -28,6 +29,9 @@ export function addCollection(collection) {
 
     collections.update((list) => {
         CommonHelper.pushOrReplaceByKey(list, collection, "id");
+
+        refreshProtectedFilesCollectionsCache();
+
         return CommonHelper.sortCollections(list);
     });
 }
@@ -42,6 +46,8 @@ export function removeCollection(collection) {
             }
             return current;
         });
+
+        refreshProtectedFilesCollectionsCache();
 
         return list;
     });
@@ -66,9 +72,25 @@ export async function loadCollections(activeId = null) {
         } else if (items.length) {
             activeCollection.set(items[0]);
         }
+
+        refreshProtectedFilesCollectionsCache();
     } catch (err) {
-        ApiClient.errorResponseHandler(err);
+        ApiClient.error(err);
     }
 
     isCollectionsLoading.set(false);
+}
+
+function refreshProtectedFilesCollectionsCache() {
+    protectedFilesCollectionsCache.update((cache) => {
+        collections.update((current) => {
+            for (let c of current) {
+                cache[c.id] = !!c.schema?.find((f) => f.type == "file" && f.options?.protected);
+            }
+
+            return current;
+        });
+
+        return cache;
+    });
 }

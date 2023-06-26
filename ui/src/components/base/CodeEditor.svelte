@@ -94,8 +94,6 @@
                 readOnlyCompartment.reconfigure(EditorState.readOnly.of(disabled)),
             ],
         });
-
-        triggerNativeChange();
     }
 
     $: if (editor && value != editor.state.doc.toString()) {
@@ -162,7 +160,21 @@
         switch (language) {
             case "html":
                 return htmlLang();
-            case "sql":
+            case "sql-create-index":
+                return sql({
+                    // lightweight sql dialect with mostly SELECT statements keywords
+                    dialect: SQLDialect.define({
+                        keywords:
+                            "create unique index if not exists on collate asc desc where like isnull notnull " +
+                            "date time datetime unixepoch strftime lower upper substr " +
+                            "case when then iif if else json_extract json_each json_tree json_array_length json_valid ",
+                        operatorChars: "*+-%<>!=&|/~",
+                        identifierQuotes: '`"',
+                        specialVar: "@:?$",
+                    }),
+                    upperCaseKeywords: true,
+                });
+            case "sql-select":
                 let schema = {};
                 for (let collection of $collections) {
                     schema[collection.name] = CommonHelper.getAllCollectionIdentifiers(collection);

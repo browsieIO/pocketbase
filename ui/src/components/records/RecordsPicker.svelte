@@ -107,7 +107,7 @@
                 list = CommonHelper.filterDuplicatesByKey(selected.concat(list));
             }
         } catch (err) {
-            ApiClient.errorResponseHandler(err);
+            ApiClient.error(err);
         }
 
         isLoadingSelected = false;
@@ -132,9 +132,11 @@
         try {
             const page = reset ? 1 : currentPage + 1;
 
+            const fallbackSearchFields = CommonHelper.getAllCollectionIdentifiers(collection);
+
             const result = await ApiClient.collection(collectionId).getList(page, batchSize, {
-                filter: filter,
-                sort: !collection?.isView ? "-created" : "",
+                filter: CommonHelper.normalizeSearchFilter(filter, fallbackSearchFields),
+                sort: !collection?.$isView ? "-created" : "",
                 $cancelKey: uniqueId + "loadList",
             });
 
@@ -142,7 +144,7 @@
             currentPage = result.page;
             totalItems = result.totalItems;
         } catch (err) {
-            ApiClient.errorResponseHandler(err);
+            ApiClient.error(err);
         }
 
         isLoadingList = false;
@@ -199,7 +201,7 @@
             autocompleteCollection={collection}
             on:submit={(e) => (filter = e.detail)}
         />
-        {#if !collection?.isView}
+        {#if !collection?.$isView}
             <button
                 type="button"
                 class="btn btn-transparent btn-hint p-l-sm p-r-sm"
@@ -243,7 +245,7 @@
                 <div class="content">
                     <RecordInfo {record} {displayFields} />
                 </div>
-                {#if !collection?.isView}
+                {#if !collection?.$isView}
                     <div class="actions nonintrusive">
                         <button
                             type="button"
@@ -308,7 +310,7 @@
             <span class="txt">Cancel</span>
         </button>
         <button type="button" class="btn" on:click={() => save()}>
-            <span class="txt">Save selection</span>
+            <span class="txt">Set selection</span>
         </button>
     </svelte:fragment>
 </OverlayPanel>

@@ -8,11 +8,12 @@
     const uniqueId = "search_" + CommonHelper.randomString(7);
 
     export let value = "";
-    export let placeholder = 'Search filter, ex. created > "2022-01-01"...';
+    export let placeholder = 'Search term or filter like created > "2022-01-01"...';
 
     // autocomplete filter component fields
     export let autocompleteCollection = new Collection();
     export let extraAutocompleteKeys = [];
+
     let filterComponent;
     let isFilterComponentLoading = false;
 
@@ -82,17 +83,17 @@
         />
     {/if}
 
-    {#if value.length || tempValue.length}
-        {#if tempValue !== value}
-            <button
-                type="submit"
-                class="btn btn-expanded btn-sm btn-warning"
-                transition:fly|local={{ duration: 150, x: 5 }}
-            >
-                <span class="txt">Search</span>
-            </button>
-        {/if}
+    {#if (value.length || tempValue.length) && tempValue != value}
+        <button
+            type="submit"
+            class="btn btn-expanded btn-sm btn-warning"
+            transition:fly|local={{ duration: 150, x: 5 }}
+        >
+            <span class="txt">Search</span>
+        </button>
+    {/if}
 
+    {#if value.length || tempValue.length}
         <button
             type="button"
             class="btn btn-transparent btn-sm btn-hint p-l-xs p-r-xs m-l-10"

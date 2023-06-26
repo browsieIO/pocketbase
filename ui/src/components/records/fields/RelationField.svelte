@@ -1,9 +1,11 @@
 <script>
+    import { onDestroy } from "svelte";
     import { SchemaField } from "pocketbase";
     import CommonHelper from "@/utils/CommonHelper";
     import ApiClient from "@/utils/ApiClient";
     import tooltip from "@/actions/tooltip";
     import Field from "@/components/base/Field.svelte";
+    import Draggable from "@/components/base/Draggable.svelte";
     import RecordsPicker from "@/components/records/RecordsPicker.svelte";
     import RecordInfo from "@/components/records/RecordInfo.svelte";
 
@@ -16,6 +18,7 @@
     let fieldRef;
     let list = [];
     let isLoading = false;
+    let loadTimeoutId;
 
     $: isMultiple = field.options?.maxSelect != 1;
 
@@ -23,13 +26,33 @@
         fieldRef?.changed();
     }
 
-    load();
+    $: if (needLoad(list, value)) {
+        // Move the load function to the end of the execution queue.
+        //
+        // It helps reducing the layout shifts (the relation field has fixed height skeleton loader)
+        // and allows the other form fields to load sooner.
+        clearTimeout(loadTimeoutId);
+        loadTimeoutId = setTimeout(load, 0);
+    }
+
+    function needLoad() {
+        if (isLoading) {
+            return false;
+        }
+
+        const ids = CommonHelper.toArray(value);
+
+        list = list.filter((item) => ids.includes(item.id));
+
+        return ids.length != list.length;
+    }
 
     async function load() {
         const ids = CommonHelper.toArray(value);
 
+        list = []; // reset
+
         if (!field?.options?.collectionId || !ids.length) {
-            list = [];
             isLoading = false;
             return;
         }
@@ -69,7 +92,7 @@
 
             list = list;
         } catch (err) {
-            ApiClient.errorResponseHandler(err);
+            ApiClient.error(err);
         }
 
         isLoading = false;
@@ -79,12 +102,20 @@
         CommonHelper.removeByKey(list, "id", rel.id);
         list = list;
 
+        listToValue();
+    }
+
+    function listToValue() {
         if (isMultiple) {
             value = list.map((r) => r.id);
         } else {
             value = list[0]?.id || "";
         }
     }
+
+    onDestroy(() => {
+        clearTimeout(loadTimeoutId);
+    });
 </script>
 
 <Field
@@ -100,22 +131,34 @@
 
     <div class="list">
         <div class="relations-list">
-            {#each list as record}
-                <div class="list-item">
-                    <div class="content">
-                        <RecordInfo {record} displayFields={field.options?.displayFields} />
+            {#each list as record, i (record.id)}
+                <Draggable
+                    bind:list
+                    group={field.name + "_relation"}
+                    index={i}
+                    disabled={!isMultiple}
+                    let:dragging
+                    let:dragover
+                    on:sort={() => {
+                        listToValue();
+                    }}
+                >
+                    <div class="list-item" class:dragging class:dragover>
+                        <div class="content">
+                            <RecordInfo {record} displayFields={field.options?.displayFields} />
+                        </div>
+                        <div class="actions">
+                            <button
+                                type="button"
+                                class="btn btn-transparent btn-hint btn-sm btn-circle btn-remove"
+                                use:tooltip={"Remove"}
+                                on:click={() => remove(record)}
+                            >
+                                <i class="ri-close-line" />
+                            </button>
+                        </div>
                     </div>
-                    <div class="actions">
-                        <button
-                            type="button"
-                            class="btn btn-transparent btn-hint btn-sm btn-circle btn-remove"
-                            use:tooltip={"Remove"}
-                            on:click={() => remove(record)}
-                        >
-                            <i class="ri-close-line" />
-                        </button>
-                    </div>
-                </div>
+                </Draggable>
             {:else}
                 {#if isLoading}
                     {#each CommonHelper.toArray(value).slice(0, 10) as _}

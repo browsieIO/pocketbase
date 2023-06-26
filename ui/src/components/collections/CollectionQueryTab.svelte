@@ -72,7 +72,7 @@
             this={codeEditorComponent}
             id={uniqueId}
             placeholder="eg. SELECT id, name from posts"
-            language="sql"
+            language="sql-select"
             minHeight="150"
             on:change={() => {
                 if (schemaErrors.length) {
@@ -91,6 +91,10 @@
                 <br />
                 If your query doesn't have a suitable one, you can use the universal
                 <code>(ROW_NUMBER() OVER()) as id</code>.
+            </li>
+            <li>
+                Expressions must be aliased with a valid formatted field name (eg.
+                <code>MAX(balance) as maxBalance</code>).
             </li>
         </ul>
     </div>

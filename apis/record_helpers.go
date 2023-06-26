@@ -30,9 +30,18 @@ func RequestData(c echo.Context) *models.RequestData {
 	}
 
 	result := &models.RequestData{
-		Method: c.Request().Method,
-		Query:  map[string]any{},
-		Data:   map[string]any{},
+		Method:  c.Request().Method,
+		Query:   map[string]any{},
+		Data:    map[string]any{},
+		Headers: map[string]any{},
+	}
+
+	// extract the first value of all headers and normalizes the keys
+	// ("X-Token" is converted to "x_token")
+	for k, v := range c.Request().Header {
+		if len(v) > 0 {
+			result.Headers[strings.ToLower(strings.ReplaceAll(k, "-", "_"))] = v[0]
+		}
 	}
 
 	result.AuthRecord, _ = c.Get(ContextAuthRecordKey).(*models.Record)
@@ -112,7 +121,9 @@ func EnrichRecords(c echo.Context, dao *daos.Dao, records []*models.Record, defa
 	}
 
 	expands := defaultExpands
-	expands = append(expands, strings.Split(c.QueryParam(expandQueryParam), ",")...)
+	if param := c.QueryParam(expandQueryParam); param != "" {
+		expands = append(expands, strings.Split(param, ",")...)
+	}
 	if len(expands) == 0 {
 		return nil // nothing to expand
 	}

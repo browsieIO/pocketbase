@@ -13,6 +13,7 @@ import PageAuthProviders     from "@/components/settings/PageAuthProviders.svelt
 import PageTokenOptions      from "@/components/settings/PageTokenOptions.svelte";
 import PageExportCollections from "@/components/settings/PageExportCollections.svelte";
 import PageImportCollections from "@/components/settings/PageImportCollections.svelte";
+import PageBackups           from "@/components/settings/PageBackups.svelte";
 
 const baseConditions = [
     async (details) => {
@@ -105,6 +106,12 @@ const routes = {
         userData: { showAppSidebar: true },
     }),
 
+    "/settings/backups": wrap({
+        component:  PageBackups,
+        conditions: baseConditions.concat([(_) => ApiClient.authStore.isValid]),
+        userData: { showAppSidebar: true },
+    }),
+
     // ---------------------------------------------------------------
     // Records email confirmation actions
     // ---------------------------------------------------------------
@@ -141,6 +148,12 @@ const routes = {
     }),
     "/auth/confirm-email-change/:token": wrap({
         asyncComponent:  () => import("@/components/records/PageRecordConfirmEmailChange.svelte"),
+        conditions: baseConditions,
+        userData: { showAppSidebar: false },
+    }),
+
+    "/auth/oauth2-redirect": wrap({
+        asyncComponent:  () => import("@/components/records/PageOAuth2Redirect.svelte"),
         conditions: baseConditions,
         userData: { showAppSidebar: false },
     }),

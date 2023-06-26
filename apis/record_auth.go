@@ -1,6 +1,7 @@
 package apis
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -17,6 +18,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/routine"
 	"github.com/pocketbase/pocketbase/tools/search"
 	"github.com/pocketbase/pocketbase/tools/security"
+	"github.com/pocketbase/pocketbase/tools/subscriptions"
 	"golang.org/x/oauth2"
 )
 
@@ -25,12 +27,15 @@ import (
 func bindRecordAuthApi(app core.App, rg *echo.Group) {
 	api := recordAuthApi{app: app}
 
+	// global oauth2 subscription redirect handler
+	rg.GET("/oauth2-redirect", api.oauth2SubscriptionRedirect)
+
+	// common collection record related routes
 	subGroup := rg.Group(
 		"/collections/:collection",
 		ActivityLogger(app),
 		LoadCollectionContext(app, models.CollectionTypeAuth),
 	)
-
 	subGroup.GET("/auth-methods", api.authMethods)
 	subGroup.POST("/auth-refresh", api.authRefresh, RequireSameContextRecordAuth())
 	subGroup.POST("/auth-with-oauth2", api.authWithOAuth2)
@@ -129,6 +134,16 @@ func (api *recordAuthApi) authMethods(c echo.Context) error {
 		codeVerifier := security.RandomString(43)
 		codeChallenge := security.S256Challenge(codeVerifier)
 		codeChallengeMethod := "S256"
+		urlOpts := []oauth2.AuthCodeOption{
+			oauth2.SetAuthURLParam("code_challenge", codeChallenge),
+			oauth2.SetAuthURLParam("code_challenge_method", codeChallengeMethod),
+		}
+
+		if name == auth.NameApple {
+			// see https://developer.apple.com/documentation/sign_in_with_apple/sign_in_with_apple_js/incorporating_sign_in_with_apple_into_other_platforms#3332113
+			urlOpts = append(urlOpts, oauth2.SetAuthURLParam("response_mode", "query"))
+		}
+
 		result.AuthProviders = append(result.AuthProviders, providerInfo{
 			Name:                name,
 			State:               state,
@@ -137,9 +152,8 @@ func (api *recordAuthApi) authMethods(c echo.Context) error {
 			CodeChallengeMethod: codeChallengeMethod,
 			AuthUrl: provider.BuildAuthUrl(
 				state,
-				oauth2.SetAuthURLParam("code_challenge", codeChallenge),
-				oauth2.SetAuthURLParam("code_challenge_method", codeChallengeMethod),
-			) + "&redirect_uri=", // empty redirect_uri so that users can append their url
+				urlOpts...,
+			) + "&redirect_uri=", // empty redirect_uri so that users can append their redirect url
 		})
 	}
 
@@ -168,9 +182,17 @@ func (api *recordAuthApi) authWithOAuth2(c echo.Context) error {
 		return NewBadRequestError("An error occurred while loading the submitted data.", readErr)
 	}
 
+	event := new(core.RecordAuthWithOAuth2Event)
+	event.HttpContext = c
+	event.Collection = collection
+	event.ProviderName = form.Provider
+	event.IsNewRecord = false
+
 	form.SetBeforeNewRecordCreateFunc(func(createForm *forms.RecordUpsert, authRecord *models.Record, authUser *auth.AuthUser) error {
 		return createForm.DrySubmit(func(txDao *daos.Dao) error {
-			requestData := RequestData(c)
+			event.IsNewRecord = true
+			// clone the current request data and assign the form create data as its body data
+			requestData := *RequestData(c)
 			requestData.Data = form.CreateData
 
 			createRuleFunc := func(q *dbx.SelectQuery) error {
@@ -184,7 +206,7 @@ func (api *recordAuthApi) authWithOAuth2(c echo.Context) error {
 				}
 
 				if *collection.CreateRule != "" {
-					resolver := resolvers.NewRecordFieldResolver(txDao, collection, requestData, true)
+					resolver := resolvers.NewRecordFieldResolver(txDao, collection, &requestData, true)
 					expr, err := search.FilterData(*collection.CreateRule).BuildExpr(resolver)
 					if err != nil {
 						return err
@@ -204,14 +226,11 @@ func (api *recordAuthApi) authWithOAuth2(c echo.Context) error {
 		})
 	})
 
-	event := new(core.RecordAuthWithOAuth2Event)
-	event.HttpContext = c
-	event.Collection = collection
-
 	_, _, submitErr := form.Submit(func(next forms.InterceptorNextFunc[*forms.RecordOAuth2LoginData]) forms.InterceptorNextFunc[*forms.RecordOAuth2LoginData] {
 		return func(data *forms.RecordOAuth2LoginData) error {
 			event.Record = data.Record
 			event.OAuth2User = data.OAuth2User
+			event.ProviderClient = data.ProviderClient
 
 			return api.app.OnRecordBeforeAuthWithOAuth2Request().Trigger(event, func(e *core.RecordAuthWithOAuth2Event) error {
 				data.Record = e.Record
@@ -224,7 +243,15 @@ func (api *recordAuthApi) authWithOAuth2(c echo.Context) error {
 				e.Record = data.Record
 				e.OAuth2User = data.OAuth2User
 
-				return RecordAuthResponse(api.app, e.HttpContext, e.Record, e.OAuth2User)
+				meta := struct {
+					*auth.AuthUser
+					IsNew bool `json:"isNew"`
+				}{
+					AuthUser: e.OAuth2User,
+					IsNew:    event.IsNewRecord,
+				}
+
+				return RecordAuthResponse(api.app, e.HttpContext, e.Record, meta)
 			})
 		}
 	})
@@ -614,4 +641,41 @@ func (api *recordAuthApi) unlinkExternalAuth(c echo.Context) error {
 	}
 
 	return handlerErr
+}
+
+// -------------------------------------------------------------------
+
+const oauth2SubscriptionTopic = "@oauth2"
+
+func (api *recordAuthApi) oauth2SubscriptionRedirect(c echo.Context) error {
+	state := c.QueryParam("state")
+	code := c.QueryParam("code")
+
+	if code == "" || state == "" {
+		return NewBadRequestError("Invalid OAuth2 redirect parameters.", nil)
+	}
+
+	client, err := api.app.SubscriptionsBroker().ClientById(state)
+	if err != nil || client.IsDiscarded() || !client.HasSubscription(oauth2SubscriptionTopic) {
+		return NewNotFoundError("Missing or invalid OAuth2 subscription client.", err)
+	}
+
+	data := map[string]string{
+		"state": state,
+		"code":  code,
+	}
+
+	encodedData, err := json.Marshal(data)
+	if err != nil {
+		return NewBadRequestError("Failed to marshalize OAuth2 redirect data.", err)
+	}
+
+	msg := subscriptions.Message{
+		Name: oauth2SubscriptionTopic,
+		Data: string(encodedData),
+	}
+
+	client.Channel() <- msg
+
+	return c.Redirect(http.StatusTemporaryRedirect, "../_/#/auth/oauth2-redirect")
 }

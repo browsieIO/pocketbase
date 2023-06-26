@@ -15,6 +15,7 @@ button {
     position: relative;
     z-index: 1;
     display: inline-flex;
+    vertical-align: top;
     align-items: center;
     justify-content: center;
     outline: 0;
@@ -238,12 +239,19 @@ button {
         }
     }
     &.btn-xs {
+        padding-left: 7px;
+        padding-right: 7px;
         min-width: var(--xsBtnHeight);
         min-height: var(--xsBtnHeight);
     }
     &.btn-block {
         display: flex;
         width: 100%;
+    }
+
+    // pill
+    &.btn-pill {
+        border-radius: 30px;
     }
 
     // circle
@@ -288,7 +296,6 @@ button {
             height: var(--loaderSize);
             line-height: var(--loaderSize);
             font-size: var(--loaderSize);
-            font-weight: normal;
             color: inherit;
             text-align: center;
             font-weight: normal;
@@ -338,6 +345,23 @@ button {
     display: inline-flex;
     align-items: center;
     gap: var(--xsSpacing);
+    &.no-gap {
+        gap: 0;
+        > * {
+            border-radius: 0;
+            min-width: 0;
+            box-shadow: -1px 0px 0px 0px rgba(#fff, 0.1);
+        }
+        > *:first-child {
+            border-top-left-radius: var(--btnRadius);
+            border-bottom-left-radius: var(--btnRadius);
+            box-shadow: none;
+        }
+        > *:last-child {
+            border-top-right-radius: var(--btnRadius);
+            border-bottom-right-radius: var(--btnRadius);
+        }
+    }
 }
 
 %input {
@@ -473,8 +497,6 @@ select {
         }
         i {
             font-size: 0.96rem;
-            line-height: 1;
-            margin-top: -1px;
             margin-bottom: -1px;
             &:before {
                 margin: 0;
@@ -509,8 +531,15 @@ select {
         .btn {
             margin-right: -5px;
         }
-        & ~ %input {
-            padding-right: 35px;
+        &:not(.prefix) ~ %input {
+            padding-right: 45px;
+        }
+        &.prefix {
+            right: auto;
+            left: var(--hPadding);
+            & ~ %input {
+                padding-left: 45px;
+            }
         }
     }
     label ~ .form-field-addon {
@@ -929,8 +958,9 @@ select {
     &:not(.disabled) .selected-container:hover {
         cursor: pointer;
     }
+    &.readonly,
     &.disabled {
-        color: var(--txtDisabledColor);
+        color: var(--txtHintColor);
         pointer-events: none;
         .txt-placeholder {
             color: inherit;
@@ -951,6 +981,9 @@ select {
                 cursor: inherit;
             }
         }
+    }
+    &.disabled {
+        color: var(--txtDisabledColor);
     }
 
     // dropdown
@@ -1064,6 +1097,8 @@ select {
 }
 
 .form-field-list {
+    border-radius: var(--baseRadius);
+    transition: box-shadow var(--baseAnimationSpeed);
     label {
         padding-bottom: 10px;
     }
@@ -1073,8 +1108,16 @@ select {
         border-radius: 0;
         border-bottom-left-radius: var(--baseRadius);
         border-bottom-right-radius: var(--baseRadius);
+        transition: background var(--baseAnimationSpeed);
         .list-item {
             border-top: 1px solid var(--baseAlt2Color);
+            &:hover,
+            &:focus,
+            &:focus-within,
+            &:focus-visible,
+            &:active {
+                background: none;
+            }
             &.selected {
                 background: var(--baseAlt2Color);
             }
@@ -1087,12 +1130,22 @@ select {
                     background: var(--baseAlt3Color);
                 }
             }
+            &.dragging {
+                z-index: 9;
+                box-shadow: inset 0 0 0 1px var(--baseAlt3Color);
+            }
+            &.dragover {
+                background: var(--baseAlt2Color);
+            }
         }
     }
     &:focus-within {
         .list, label {
             background: var(--baseAlt1Color);
         }
+    }
+    &.dragover:not(:has(.dragging)) {
+        box-shadow: 0px 0px 0px 2px var(--warningColor);
     }
 }
 
@@ -1177,7 +1230,21 @@ select {
         border: 0;
     }
     .form-field label ~ & {
+        position: relative;
+        z-index: auto; // reset default z-index
         padding: 5px 2px 2px 2px;
+        // blank placeholder
+        &:before {
+            content: '';
+            position: absolute;
+            z-index: -1;
+            top: 5px;
+            left: 2px;
+            right: 2px;
+            bottom: 2px;
+            background: #fff;
+            border-radius: var(--baseRadius);
+        }
     }
 }
 body {
@@ -1205,6 +1272,11 @@ body {
     .tox-swatch:not(.tox-swatch--remove):not(.tox-collection__item--enabled) {
         svg {
             display: none;
+        }
+    }
+    &.tox-fullscreen {
+        .overlay-panel-section {
+            overflow: hidden;
         }
     }
 }

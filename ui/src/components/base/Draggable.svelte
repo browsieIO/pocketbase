@@ -5,34 +5,61 @@
 
     export let index;
     export let list = [];
+    export let group = "default";
     export let disabled = false;
+    export let dragHandleClass = ""; // by default the entire element
 
     let dragging = false;
     let dragover = false;
 
-    function onDrag(event, i) {
-        if (!event && !disabled) {
+    function onDrag(e, i) {
+        if (!e || disabled) {
+            return;
+        }
+
+        if (dragHandleClass && !e.target.classList.contains(dragHandleClass)) {
+            // not the drag handle
+            dragover = false;
+            dragging = false;
+            e.preventDefault();
             return;
         }
 
         dragging = true;
 
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.dropEffect = "move";
-        event.dataTransfer.setData("text/plain", i);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.dropEffect = "move";
+        e.dataTransfer.setData(
+            "text/plain",
+            JSON.stringify({
+                index: i,
+                group: group,
+            })
+        );
+
+        dispatch("drag", e);
     }
 
-    function onDrop(event, target) {
-        if (!event && !disabled) {
-            return;
-        }
-
+    function onDrop(e, target) {
         dragover = false;
         dragging = false;
 
-        event.dataTransfer.dropEffect = "move";
+        if (!e || disabled) {
+            return;
+        }
 
-        const start = parseInt(event.dataTransfer.getData("text/plain"));
+        e.dataTransfer.dropEffect = "move";
+
+        let dragData = {};
+        try {
+            dragData = JSON.parse(e.dataTransfer.getData("text/plain"));
+        } catch (_) {}
+
+        if (dragData.group != group) {
+            return; // different draggable group
+        }
+
+        const start = dragData.index << 0;
 
         if (start < target) {
             list.splice(target + 1, 0, list[start]);
@@ -44,12 +71,16 @@
 
         list = list;
 
-        dispatch("sort", list);
+        dispatch("sort", {
+            oldIndex: start,
+            newIndex: target,
+            list: list,
+        });
     }
 </script>
 
 <div
-    draggable={true}
+    draggable={!disabled}
     class="draggable"
     class:dragging
     class:dragover

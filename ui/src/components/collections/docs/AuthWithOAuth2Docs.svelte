@@ -4,6 +4,7 @@
     import CommonHelper from "@/utils/CommonHelper";
     import CodeBlock from "@/components/base/CodeBlock.svelte";
     import SdkTabs from "@/components/collections/docs/SdkTabs.svelte";
+    import FieldsQueryParam from "@/components/collections/docs/FieldsQueryParam.svelte";
 
     export let collection = new Collection();
 
@@ -17,7 +18,7 @@
             code: 200,
             body: JSON.stringify(
                 {
-                    token: "JWT_TOKEN",
+                    token: "JWT_AUTH_TOKEN",
                     record: CommonHelper.dummyCollectionRecord(collection),
                     meta: {
                         id: "abc123",
@@ -25,6 +26,9 @@
                         username: "john.doe",
                         email: "test@example.com",
                         avatarUrl: "https://example.com/avatar.png",
+                        accessToken: "...",
+                        refreshToken: "...",
+                        rawUser: {},
                     },
                 },
                 null,
@@ -52,11 +56,10 @@
 <h3 class="m-b-sm">Auth with OAuth2 ({collection.name})</h3>
 <div class="content txt-lg m-b-sm">
     <p>Authenticate with an OAuth2 provider and returns a new auth token and record data.</p>
-    <p>This action usually should be called right after the provider login page redirect.</p>
     <p>
-        You could also check the
+        For more details please check the
         <a href={import.meta.env.PB_OAUTH2_EXAMPLE} target="_blank" rel="noopener noreferrer">
-            OAuth2 web integration example
+            OAuth2 integration documentation
         </a>.
     </p>
 </div>
@@ -69,49 +72,46 @@
 
         ...
 
-        const authData = await pb.collection('${collection?.name}').authWithOAuth2(
-            'google',
-            'CODE',
-            'VERIFIER',
-            'REDIRECT_URL',
-            // optional data that will be used for the new account on OAuth2 sign-up
-            {
-              'name': 'test',
-            },
-        );
+        // OAuth2 authentication with a single realtime call.
+        //
+        // Make sure to register ${backendAbsUrl}/api/oauth2-redirect as redirect url.
+        const authData = await pb.collection('users').authWithOAuth2({ provider: 'google' });
+
+        // OR authenticate with manual OAuth2 code exchange
+        // const authData = await pb.collection('users').authWithOAuth2Code(...);
 
         // after the above you can also access the auth data from the authStore
         console.log(pb.authStore.isValid);
         console.log(pb.authStore.token);
         console.log(pb.authStore.model.id);
 
-        // "logout" the last authenticated account
+        // "logout" the last authenticated model
         pb.authStore.clear();
     `}
     dart={`
         import 'package:pocketbase/pocketbase.dart';
+        import 'package:url_launcher/url_launcher.dart';
 
         final pb = PocketBase('${backendAbsUrl}');
 
         ...
 
-        final authData = await pb.collection('${collection?.name}').authWithOAuth2(
-          'google',
-          'CODE',
-          'VERIFIER',
-          'REDIRECT_URL',
-          // optional data that will be used for the new account on OAuth2 sign-up
-          createData: {
-            'name': 'test',
-          },
-        );
+        // OAuth2 authentication with a single realtime call.
+        //
+        // Make sure to register ${backendAbsUrl}/api/oauth2-redirect as redirect url.
+        final authData = await pb.collection('users').authWithOAuth2('google', (url) async {
+          await launchUrl(url);
+        });
+
+        // OR authenticate with manual OAuth2 code exchange
+        // final authData = await pb.collection('users').authWithOAuth2Code(...);
 
         // after the above you can also access the auth data from the authStore
         print(pb.authStore.isValid);
         print(pb.authStore.token);
         print(pb.authStore.model.id);
 
-        // "logout" the last authenticated account
+        // "logout" the last authenticated model
         pb.authStore.clear();
     `}
 />
@@ -235,6 +235,7 @@
                 Only the relations to which the request user has permissions to <strong>view</strong> will be expanded.
             </td>
         </tr>
+        <FieldsQueryParam />
     </tbody>
 </table>
 
